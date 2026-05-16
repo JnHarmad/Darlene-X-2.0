@@ -1,0 +1,87 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "darlene-x"
+version = "0.1.0"
+description = "Static Android APK malware analysis framework with semantic analysis layer"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Security Research Team"}
+]
+
+dependencies = [
+    # Core CLI
+    "click>=8.1",
+    "rich>=13.0",
+    
+    # APK Analysis
+    "androguard>=3.4",
+    
+    # Code Analysis & Pattern Matching
+    "networkx>=3.2",
+    
+    # LLM Integration
+    "anthropic>=0.25",
+    
+    # Template Generation
+    "jinja2>=3.1",
+    
+    # HTML/PDF Report Generation
+    "reportlab>=4.0",
+    
+    # Logging
+    "loguru>=0.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "ruff>=0.1",
+    "mypy>=1.0",
+]
+
+advanced = [
+    # External tool integrations (optional, for full analysis)
+    # Install these manually if needed:
+    # - apktool: static APK decompilation
+    # - jadx: Java source reconstruction
+    # - semgrep: code pattern matching
+    # - trufflehog: secret scanning
+    # - detect-secrets: credential detection
+    # - yara: pattern matching
+    # - radare2: binary analysis
+    # - ghidra: reverse engineering
+]
+
+[project.scripts]
+darlene-x = "darlene_x.cli:main"
+
+[tool.setuptools]
+packages = ["darlene_x"]
+
+[tool.setuptools.package-data]
+darlene_x = [
+    "modules/templates/*.html",
+    "scripts/yara_rules/*.yar",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+select = ["E", "F", "W"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
