@@ -1,0 +1,205 @@
+**How to structure the framework:**Here's the architecture — two diagrams, one for the overall structure and one for the data flow between modules.Now here's the concrete starting point — the actual scaffold to build from, with the right patterns baked in from day one.
+
+**Project layout and setup:**
+
+```
+apk-analyst/
+├── analysers/
+│   ├── __init__.py
+│   ├── unpack.py
+│   ├── manifest.py
+│   ├── code.py
+│   ├── secrets.py
+│   ├── native.py
+│   ├── network.py
+│   └── novel/
+│       ├── composer.py
+│       ├── llm_classifier.py
+│       ├── trust_graph.py
+│       └── dga_detect.py
+├── core/
+│   ├── orchestrator.py
+│   ├── tool_runner.py
+│   ├── result_store.py
+│   └── report.py
+├── cli.py
+├── pyproject.toml
+└── tests/
+```
+
+**The three patterns to get right from day one:**
+
+First, the `BaseAnalyser` — every phase inherits this so the orchestrator can treat them identically:
+
+```python
+# core/base.py
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Any
+
+@dataclass
+class Finding:
+    phase: str
+    severity: str          # critical / high / medium / info
+    title: str
+    detail: str
+    evidence: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
+
+class BaseAnalyser(ABC):
+    name: str = ""
+
+    def __init__(self, apk_path: str, work_dir: str):
+        self.apk_path = apk_path
+        self.work_dir = work_dir
+        self.findings: list[Finding] = []
+
+    @abstractmethod
+    def run(self) -> list[Finding]:
+        ...
+
+    def _finding(self, severity, title, detail, evidence=None, tags=None):
+        f = Finding(self.name, severity, title, detail,
+                    evidence or [], tags or [])
+        self.findings.append(f)
+        return f
+```
+
+Second, the `tool_runner` — every subprocess call goes through this so you get timeouts, logging, and error capture for free:
+
+```python
+# core/tool_runner.py
+import subprocess, shutil, logging
+
+log = logging.getLogger(__name__)
+
+def run(cmd: list[str], timeout=120, check=False) -> tuple[str, str, int]:
+    """Returns (stdout, stderr, returncode). Never raises on non-zero by default."""
+    if not shutil.which(cmd[0]):
+        log.warning("tool not found: %s — skipping", cmd[0])
+        return "", f"{cmd[0]} not installed", -1
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True,
+                           timeout=timeout)
+        return r.stdout, r.stderr, r.returncode
+    except subprocess.TimeoutExpired:
+        log.warning("timeout: %s", " ".join(cmd))
+        return "", "timeout", -1
+```
+
+This is crucial — if `jadx` or `apktool` isn't installed, you want a graceful skip, not a crash. The framework should still produce partial results.
+
+Third, the orchestrator with parallel phase execution:
+
+```python
+# core/orchestrator.py
+import concurrent.futures, json, pathlib
+from core.tool_runner import run
+from core.result_store import ResultStore
+
+class Orchestrator:
+    def __init__(self, apk_path: str, out_dir: str, parallel=True):
+        self.apk_path = apk_path
+        self.out_dir = pathlib.Path(out_dir)
+        self.out_dir.mkdir(parents=True, exist_ok=True)
+        self.store = ResultStore(self.out_dir / "results.db")
+        self.parallel = parallel
+
+    def run_phases(self, analysers: list):
+        """Phases 1-6 are I/O bound — run them in parallel.
+           Phase 7 (novel/LLM) runs after, consuming their output."""
+        standard = [a for a in analysers if not getattr(a, 'depends_on_all', False)]
+        novel     = [a for a in analysers if getattr(a, 'depends_on_all', False)]
+
+        all_findings = []
+
+        if self.parallel:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+                futures = {ex.submit(a.run): a for a in standard}
+                for fut in concurrent.futures.as_completed(futures):
+                    findings = fut.result()
+                    all_findings.extend(findings)
+                    self.store.save(findings)
+        else:
+            for a in standard:
+                findings = a.run()
+                all_findings.extend(findings)
+                self.store.save(findings)
+
+        # Novel layer gets the full context from all prior phases
+        for a in novel:
+            a.prior_findings = all_findings
+            findings = a.run()
+            all_findings.extend(findings)
+            self.store.save(findings)
+
+        return all_findings
+```
+
+**The CLI entry point** — use `click`, not `argparse`. It's cleaner and makes subcommands easy later:
+
+```python
+# cli.py
+import click
+from core.orchestrator import Orchestrator
+from analysers.unpack import UnpackAnalyser
+from analysers.manifest import ManifestAnalyser
+from analysers.code import CodeAnalyser
+from analysers.novel.composer import CapabilityComposer
+from analysers.novel.llm_classifier import LLMClassifier
+
+@click.command()
+@click.argument("apk")
+@click.option("--out", default="./out", help="Output directory")
+@click.option("--no-llm", is_flag=True, help="Skip Claude API call")
+@click.option("--serial", is_flag=True, help="Run phases serially (debug)")
+def analyse(apk, out, no_llm, serial):
+    """Static analysis of an Android APK."""
+    orch = Orchestrator(apk, out, parallel=not serial)
+    analysers = [
+        UnpackAnalyser(apk, out),
+        ManifestAnalyser(apk, out),
+        CodeAnalyser(apk, out),
+        CapabilityComposer(apk, out),
+    ]
+    if not no_llm:
+        analysers.append(LLMClassifier(apk, out))
+
+    findings = orch.run_phases(analysers)
+    click.echo(f"\n{len(findings)} findings. Report: {out}/report.html")
+
+if __name__ == "__main__":
+    analyse()
+```
+
+**`pyproject.toml` — the right deps from the start:**
+
+```toml
+[project]
+name = "apk-analyst"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+dependencies = [
+    "click>=8.1",
+    "androguard>=3.4",      # native Python APK parsing (no subprocess for manifest)
+    "networkx>=3.2",        # trust boundary graph
+    "anthropic>=0.25",      # LLM classifier
+    "semgrep>=1.60",        # code analysis
+    "rich>=13",             # terminal output
+    "jinja2>=3.1",          # HTML report templating
+]
+
+[project.scripts]
+apk-analyst = "cli:analyse"
+```
+
+Note `androguard` — this is the one Python-native APK library. Use it directly instead of shelling out to `aapt2` for manifest parsing. It gives you a proper Python object model for the manifest, permissions, and components.
+
+**Key decisions to make now before you write more code:**
+
+The result storage format matters most. Use SQLite with a simple schema (`phase TEXT, severity TEXT, title TEXT, detail TEXT, evidence JSON`) rather than flat JSON files — you'll want to query across phases later ("show me all HIGH findings from manifest AND code phases"). The `result_store.py` is where you do this once and never think about it again.
+
+For external tools (`apktool`, `jadx`, `semgrep`), don't bundle them — detect them at startup and print a clear install guide for anything missing. The `tool_runner.py` pattern above handles graceful degradation automatically.
+
+The `--no-llm` flag is important to wire in from day one. Claude API calls cost money and take seconds; you want the ability to do fast iteration on the structural phases without triggering the semantic layer every time.
