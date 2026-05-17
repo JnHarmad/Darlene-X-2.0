@@ -16,4 +16,16 @@ Plus Phase 7 (novel) for semantic analysis:
 - dga_detect - Domain generation algorithm detection
 """
 
-__all__ = []
+from .unpack import UnpackAnalyser
+from .manifest import ManifestAnalyser
+from .code import APIAnalyser
+from .signature import SignatureAnalyser
+from .secrets import SecretsAnalyser
+
+__all__ = [
+    "UnpackAnalyser",
+    "ManifestAnalyser",
+    "APIAnalyser",
+    "SignatureAnalyser",
+    "SecretsAnalyser",
+]

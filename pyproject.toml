@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "darlene-x"
-version = "0.1.0"
+version = "2.0.0"
 description = "Static Android APK malware analysis framework with semantic analysis layer"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -14,27 +14,32 @@ authors = [
 ]
 
 dependencies = [
-    # Core CLI
-    "click>=8.1",
-    "rich>=13.0",
+    # Core CLI & Framework
+    "click>=8.1.0",
+    "rich>=13.0.0",
+    "loguru>=0.7.0",
     
     # APK Analysis
-    "androguard>=3.4",
+    "androguard>=4.0.0",
     
-    # Code Analysis & Pattern Matching
-    "networkx>=3.2",
+    # Graph & Network Analysis
+    "networkx>=3.2.0",
+    
+    # Report Generation
+    "jinja2>=3.1.0",
+    "reportlab>=4.0.0",
+    
+    # Data Processing
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+    
+    # Utilities
+    "python-dateutil>=2.8.0",
+    "pytz>=2024.1",
+    "six>=1.16.0",
     
     # LLM Integration
-    "anthropic>=0.25",
-    
-    # Template Generation
-    "jinja2>=3.1",
-    
-    # HTML/PDF Report Generation
-    "reportlab>=4.0",
-    
-    # Logging
-    "loguru>=0.7",
+    "anthropic>=0.25.0",
 ]
 
 [project.optional-dependencies]
@@ -47,7 +52,29 @@ dev = [
 ]
 
 advanced = [
-    # External tool integrations (optional, for full analysis)
+    # Pattern matching with YARA (requires yara-core system library)
+    "yara-python>=4.2.0",
+]
+
+[project.scripts]
+darlene-x = "darlene_x.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["darlene_x*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.ruff]
+select = ["E", "F", "W"]
+line-length = 100
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
     # Install these manually if needed:
     # - apktool: static APK decompilation
     # - jadx: Java source reconstruction
