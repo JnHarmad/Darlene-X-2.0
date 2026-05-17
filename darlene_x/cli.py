@@ -12,19 +12,21 @@ To run:
 """
 
 import logging
+import sys
 from pathlib import Path
 from typing import Optional
 import json
 import tempfile
 import uuid
 
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+import click
+from rich.console import Console
+from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn
 from loguru import logger
 
-# Configure logging
-logger.enable("darlene_x")
-log = logging.getLogger(__name__)
+console = Console()
+
 
 
 @click.group()

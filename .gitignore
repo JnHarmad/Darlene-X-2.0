@@ -1,3 +1,5 @@
 ncfl/
-output/
-reports/
+darlene_output/
+Darlene_X/apk/
+*pycache*
+.venv/
