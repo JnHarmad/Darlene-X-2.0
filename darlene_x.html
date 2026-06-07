@@ -1,0 +1,1389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Darlene-X · APK Static Analysis</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root {
+  --bg:#0d0d0f;--bg2:#15151a;--bg3:#1c1c23;--bg4:#222230;
+  --border:#2a2a35;--border2:#3a3a48;
+  --text:#e8e8f0;--text2:#9090a8;--text3:#5a5a70;
+  --green:#22c55e;--green-dim:#16a34a22;
+  --red:#ef4444;--red-dim:#dc262622;
+  --amber:#f59e0b;--amber-dim:#d9770622;
+  --blue:#3b82f6;--blue-dim:#2563eb22;
+  --purple:#a855f7;--purple-dim:#9333ea22;
+  --teal:#14b8a6;--teal-dim:#0d948422;
+  --font:'JetBrains Mono','Fira Code','Cascadia Code',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:13px;min-height:100vh;line-height:1.6}
+#app{max-width:1280px;margin:0 auto;padding:2rem 1.5rem}
+
+.header{display:flex;align-items:center;gap:1rem;margin-bottom:2rem;border-bottom:1px solid var(--border);padding-bottom:1.5rem}
+.logo{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#ef4444,#a855f7);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.header h1{font-size:17px;font-weight:700;letter-spacing:-0.3px}
+.header p{font-size:11px;color:var(--text2);margin-top:2px}
+.badges{margin-left:auto;display:flex;gap:8px}
+.badge{font-size:10px;padding:3px 10px;border-radius:100px;letter-spacing:1px;border:1px solid}
+.badge.offline{color:var(--green);border-color:var(--green)}
+.badge.engine{color:var(--purple);border-color:var(--purple)}
+
+.drop-zone{border:1.5px dashed var(--border2);border-radius:12px;padding:2.5rem 2rem;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;position:relative;margin-bottom:1.5rem}
+.drop-zone:hover,.drop-zone.drag-over{border-color:var(--blue);background:var(--blue-dim)}
+.drop-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.drop-zone h2{font-size:14px;margin-bottom:4px}
+.drop-zone p{color:var(--text2);font-size:11px}
+
+.controls{display:flex;gap:8px;margin-bottom:1.5rem;flex-wrap:wrap;align-items:center}
+.btn{padding:7px 16px;border-radius:7px;font-family:var(--font);font-size:12px;cursor:pointer;border:1px solid var(--border2);background:var(--bg2);color:var(--text);transition:all .15s;font-weight:500;letter-spacing:.3px}
+.btn:hover{border-color:var(--blue);color:var(--blue)}
+.btn.danger:hover{border-color:var(--red);color:var(--red)}
+.btn.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.btn.primary:hover{opacity:.85}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:1.5rem}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:.9rem 1.1rem}
+.stat-card .label{font-size:10px;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin-bottom:3px}
+.stat-card .val{font-size:20px;font-weight:700}
+.stat-card.red .val{color:var(--red)}
+.stat-card.amber .val{color:var(--amber)}
+.stat-card.green .val{color:var(--green)}
+.stat-card.blue .val{color:var(--blue)}
+.stat-card.purple .val{color:var(--purple)}
+.stat-card.teal .val{color:var(--teal)}
+
+.section-title{font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:.6rem;display:flex;align-items:center;gap:8px}
+.section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+
+.queue-item{display:flex;align-items:center;gap:10px;padding:9px 13px;border-radius:7px;border:1px solid var(--border);background:var(--bg2);margin-bottom:5px}
+.q-name{flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.q-size{color:var(--text3);font-size:11px;flex-shrink:0}
+.q-status{font-size:10px;padding:2px 9px;border-radius:100px;white-space:nowrap;flex-shrink:0}
+.q-status.pending{color:var(--text2);border:1px solid var(--border)}
+.q-status.scanning{color:var(--blue);border:1px solid var(--blue);animation:pulse 1s infinite}
+.q-status.clean{color:var(--green);border:1px solid var(--green);background:var(--green-dim)}
+.q-status.malicious{color:var(--red);border:1px solid var(--red);background:var(--red-dim)}
+.q-status.suspicious{color:var(--amber);border:1px solid var(--amber);background:var(--amber-dim)}
+.q-status.error{color:var(--red);border:1px solid var(--border)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+.overall-progress{height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:5px}
+.overall-bar{height:100%;background:linear-gradient(90deg,var(--blue),var(--purple));transition:width .4s;border-radius:2px}
+.progress-label{font-size:10px;color:var(--text3)}
+
+.result-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden}
+.result-header{display:flex;align-items:center;gap:10px;padding:13px 15px;cursor:pointer;user-select:none;transition:background .15s}
+.result-header:hover{background:var(--bg3)}
+.r-name{flex:1;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r-verdict{font-size:11px;padding:3px 11px;border-radius:100px;font-weight:700;flex-shrink:0}
+.r-verdict.malicious{color:var(--red);background:var(--red-dim);border:1px solid var(--red)}
+.r-verdict.suspicious{color:var(--amber);background:var(--amber-dim);border:1px solid var(--amber)}
+.r-verdict.clean{color:var(--green);background:var(--green-dim);border:1px solid var(--green)}
+.chevron{color:var(--text3);font-size:16px;transition:transform .2s;flex-shrink:0}
+.chevron.open{transform:rotate(90deg)}
+
+.result-body{display:none;border-top:1px solid var(--border)}
+.result-body.open{display:block}
+
+.tab-bar{display:flex;gap:2px;padding:10px 15px 0;background:var(--bg3);border-bottom:1px solid var(--border)}
+.tab{font-size:11px;padding:6px 14px;border-radius:7px 7px 0 0;cursor:pointer;color:var(--text2);transition:all .15s;border:1px solid transparent;border-bottom:none;margin-bottom:-1px}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--text);background:var(--bg2);border-color:var(--border)}
+.tab-badge{display:inline-block;font-size:9px;padding:1px 6px;border-radius:100px;margin-left:5px;font-weight:700}
+.tab-badge.red{background:var(--red-dim);color:var(--red);border:1px solid var(--red)}
+.tab-badge.amber{background:var(--amber-dim);color:var(--amber);border:1px solid var(--amber)}
+.tab-badge.purple{background:var(--purple-dim);color:var(--purple);border:1px solid var(--purple)}
+.tab-badge.teal{background:var(--teal-dim);color:var(--teal);border:1px solid var(--teal)}
+.tab-badge.blue{background:var(--blue-dim);color:var(--blue);border:1px solid var(--blue)}
+
+.tab-content{display:none;padding:15px}
+.tab-content.active{display:block}
+
+.finding-group{margin-bottom:1rem}
+.finding-group-title{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--text3);margin-bottom:7px}
+.finding{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border-radius:6px;margin-bottom:4px;font-size:11px;border:1px solid transparent}
+.finding.high{background:var(--red-dim);border-color:#ef444430}
+.finding.medium{background:var(--amber-dim);border-color:#f59e0b30}
+.finding.low{background:var(--blue-dim);border-color:#3b82f630}
+.finding.info{background:var(--bg3);border-color:var(--border)}
+.finding .sev{font-size:9px;padding:1px 7px;border-radius:4px;font-weight:700;letter-spacing:.5px;flex-shrink:0;margin-top:1px;text-transform:uppercase}
+.finding.high .sev{background:var(--red);color:#fff}
+.finding.medium .sev{background:var(--amber);color:#000}
+.finding.low .sev{background:var(--blue);color:#fff}
+.finding.info .sev{background:var(--border2);color:var(--text2)}
+.finding .msg{color:var(--text);line-height:1.5}
+.finding .cat{color:var(--text3);font-size:10px;margin-top:2px}
+
+.yara-match{padding:10px 14px;border-radius:8px;margin-bottom:8px;border:1px solid var(--red);background:var(--red-dim)}
+.yara-match .rule-name{font-size:13px;font-weight:700;color:var(--red)}
+.yara-match .rule-family{font-size:10px;color:var(--text2);margin-top:2px}
+.yara-match .rule-desc{font-size:11px;color:var(--text);margin-top:6px;line-height:1.6}
+.yara-match .rule-strings{font-size:10px;color:var(--text3);margin-top:6px;font-family:var(--font)}
+.yara-clean{padding:10px 14px;border-radius:8px;border:1px solid var(--green);background:var(--green-dim);font-size:12px;color:var(--green)}
+
+.masvs-item{padding:10px 14px;border-radius:8px;margin-bottom:8px;border:1px solid;display:flex;gap:12px;align-items:flex-start}
+.masvs-item.fail{border-color:#ef444430;background:var(--red-dim)}
+.masvs-item.warn{border-color:#f59e0b30;background:var(--amber-dim)}
+.masvs-item.pass{border-color:#22c55e30;background:var(--green-dim)}
+.masvs-ctrl{font-size:10px;font-weight:700;padding:2px 8px;border-radius:5px;flex-shrink:0;margin-top:1px;letter-spacing:.5px}
+.masvs-item.fail .masvs-ctrl{background:var(--red);color:#fff}
+.masvs-item.warn .masvs-ctrl{background:var(--amber);color:#000}
+.masvs-item.pass .masvs-ctrl{background:var(--green);color:#000}
+.masvs-title{font-size:12px;font-weight:600;color:var(--text)}
+.masvs-desc{font-size:11px;color:var(--text2);margin-top:3px;line-height:1.5}
+.masvs-detail{font-size:10px;color:var(--text3);margin-top:4px;font-family:var(--font)}
+
+.sqlite-card{padding:12px 14px;border-radius:8px;margin-bottom:8px;border:1px solid var(--border);background:var(--bg3)}
+.sqlite-name{font-size:12px;font-weight:700;color:var(--teal);margin-bottom:6px}
+.sqlite-row{display:flex;gap:10px;font-size:11px;margin-bottom:4px}
+.sqlite-key{color:var(--text2);width:130px;flex-shrink:0}
+.sqlite-val{color:var(--text)}
+.sqlite-pii{display:inline-block;font-size:10px;padding:2px 8px;border-radius:4px;margin:2px;border:1px solid var(--amber);color:var(--amber);background:var(--amber-dim)}
+
+.perms-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:5px;margin-top:7px}
+.perm-pill{font-size:10px;padding:5px 9px;border-radius:6px;border:1px solid var(--border);color:var(--text2)}
+.perm-pill.danger{border-color:#ef444440;color:var(--red);background:var(--red-dim)}
+.perm-pill.warning{border-color:#f59e0b40;color:var(--amber);background:var(--amber-dim)}
+
+.meta-table{width:100%;border-collapse:collapse}
+.meta-table td{padding:5px 0;font-size:11px;border-bottom:1px solid var(--border);vertical-align:top}
+.meta-table td:first-child{color:var(--text2);width:38%;padding-right:12px}
+.meta-table td:last-child{color:var(--text);word-break:break-all}
+
+.hash-box{font-size:10px;color:var(--text2);background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:9px 12px;word-break:break-all;font-family:var(--font);line-height:1.9}
+.sig-ok{color:var(--green)}.sig-warn{color:var(--amber)}.sig-bad{color:var(--red)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="header">
+    <div class="logo">🛡</div>
+    <div>
+      <h1>Darlene-X</h1>
+      <p>Android Malware Static Analysis Framework &mdash; fully client-side, zero network exposure</p>
+    </div>
+    <div class="badges">
+      <span class="badge offline">OFFLINE</span>
+      <span class="badge engine">YARA + MASVS</span>
+    </div>
+  </div>
+
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" multiple accept=".apk"/>
+    <div style="font-size:32px;margin-bottom:.6rem">📦</div>
+    <h2>Drop APK files or click to select</h2>
+    <p>Batch analysis &bull; YARA signatures &bull; OWASP MASVS compliance &bull; SQLite inspection &bull; Zero network calls</p>
+  </div>
+
+  <div class="controls">
+    <button class="btn primary" id="btnScan" disabled>▶ Scan All</button>
+    <button class="btn" id="btnExportJSON" disabled>⬇ JSON Report</button>
+    <button class="btn" id="btnExportCSV" disabled>⬇ CSV Summary</button>
+    <button class="btn danger" id="btnClear">✕ Clear</button>
+    <span style="flex:1"></span>
+    <span id="engineInfo" style="font-size:10px;color:var(--text3)"></span>
+  </div>
+
+  <div class="stats-row" id="statsRow" style="display:none">
+    <div class="stat-card blue"><div class="label">Total</div><div class="val" id="stTotal">0</div></div>
+    <div class="stat-card red"><div class="label">Malicious</div><div class="val" id="stMalicious">0</div></div>
+    <div class="stat-card amber"><div class="label">Suspicious</div><div class="val" id="stSuspicious">0</div></div>
+    <div class="stat-card green"><div class="label">Clean</div><div class="val" id="stClean">0</div></div>
+    <div class="stat-card purple"><div class="label">YARA Hits</div><div class="val" id="stYara">0</div></div>
+    <div class="stat-card teal"><div class="label">MASVS Fails</div><div class="val" id="stMasvs">0</div></div>
+  </div>
+
+  <div id="progressContainer" style="display:none;margin-bottom:1.5rem">
+    <div class="overall-progress"><div class="overall-bar" id="overallBar" style="width:0%"></div></div>
+    <div class="progress-label" id="progressLabel">Preparing...</div>
+  </div>
+
+  <div id="queueSection" style="display:none;margin-bottom:1.5rem">
+    <div class="section-title">Queue</div>
+    <div id="queueList"></div>
+  </div>
+
+  <div id="resultsSection" style="display:none">
+    <div class="section-title">Results</div>
+    <div id="resultsList"></div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   DATA: PERMISSION INTELLIGENCE DATABASE
+   Each entry: name, risk level, category, threat description
+===================================================================== */
+const PERM_INTEL = {
+  // ── TELEPHONY / SMS ──────────────────────────────────────────────
+  'READ_SMS':           { risk:'critical', cat:'Telephony', threat:'Read all SMS messages — OTP theft, credential interception' },
+  'RECEIVE_SMS':        { risk:'critical', cat:'Telephony', threat:'Intercept incoming SMS in real-time — enables OTP/2FA bypass' },
+  'SEND_SMS':           { risk:'critical', cat:'Telephony', threat:'Send SMS silently — premium SMS fraud, C2 communication' },
+  'RECEIVE_MMS':        { risk:'high',     cat:'Telephony', threat:'Receive MMS messages — media-borne payload delivery' },
+  'RECEIVE_WAP_PUSH':   { risk:'high',     cat:'Telephony', threat:'Intercept WAP-push messages — used in subscription fraud' },
+  'READ_CALL_LOG':      { risk:'high',     cat:'Telephony', threat:'Access full call history — profiling and surveillance' },
+  'WRITE_CALL_LOG':     { risk:'high',     cat:'Telephony', threat:'Modify call records — evidence tampering, stalkerware' },
+  'PROCESS_OUTGOING_CALLS': { risk:'high', cat:'Telephony', threat:'Intercept and redirect outgoing calls' },
+  'CALL_PHONE':         { risk:'high',     cat:'Telephony', threat:'Make phone calls without user confirmation — toll fraud' },
+  'USE_SIP':            { risk:'medium',   cat:'Telephony', threat:'VoIP SIP calls — potential communication interception' },
+  'ANSWER_PHONE_CALLS': { risk:'high',     cat:'Telephony', threat:'Silently answer incoming calls — covert eavesdropping' },
+  'READ_PHONE_STATE':   { risk:'high',     cat:'Telephony', threat:'Access IMEI, IMSI, SIM state, call state — device fingerprinting' },
+  'READ_PHONE_NUMBERS': { risk:'high',     cat:'Telephony', threat:'Read device phone numbers — identity harvesting' },
+
+  // ── CONTACTS / ACCOUNTS ──────────────────────────────────────────
+  'READ_CONTACTS':      { risk:'high',     cat:'Contacts',  threat:'Exfiltrate full contact database — social graph mapping' },
+  'WRITE_CONTACTS':     { risk:'medium',   cat:'Contacts',  threat:'Modify contacts — phishing via trusted contact injection' },
+  'GET_ACCOUNTS':       { risk:'high',     cat:'Contacts',  threat:'List all accounts (Google, banking, social) on device' },
+
+  // ── LOCATION ─────────────────────────────────────────────────────
+  'ACCESS_FINE_LOCATION':       { risk:'critical', cat:'Location', threat:'GPS-precision tracking — real-time surveillance' },
+  'ACCESS_COARSE_LOCATION':     { risk:'high',     cat:'Location', threat:'Cell/WiFi-based location tracking' },
+  'ACCESS_BACKGROUND_LOCATION': { risk:'critical', cat:'Location', threat:'Track location when app is closed — persistent stalking' },
+  'CONTROL_LOCATION_UPDATES':   { risk:'high',     cat:'Location', threat:'Control location update delivery — intercept location data' },
+  'ACCESS_LOCATION_EXTRA_COMMANDS': { risk:'medium', cat:'Location', threat:'Send extra commands to GPS provider' },
+
+  // ── CAMERA / MICROPHONE ──────────────────────────────────────────
+  'CAMERA':             { risk:'critical', cat:'Sensor',    threat:'Covert photo/video capture — visual surveillance' },
+  'RECORD_AUDIO':       { risk:'critical', cat:'Sensor',    threat:'Covert audio recording — eavesdropping, keylogging via mic' },
+  'BODY_SENSORS':       { risk:'medium',   cat:'Sensor',    threat:'Access wearable sensor data (heart rate, etc.)' },
+  'ACTIVITY_RECOGNITION': { risk:'medium', cat:'Sensor',    threat:'Detect physical activity — behavioral profiling' },
+
+  // ── STORAGE ──────────────────────────────────────────────────────
+  'READ_EXTERNAL_STORAGE':  { risk:'high',   cat:'Storage', threat:'Read all files on SD card including photos, documents' },
+  'WRITE_EXTERNAL_STORAGE': { risk:'high',   cat:'Storage', threat:'Write/delete any file on external storage' },
+  'MANAGE_EXTERNAL_STORAGE':{ risk:'critical',cat:'Storage', threat:'Unrestricted access to ALL device storage — full file system' },
+  'MOUNT_UNMOUNT_FILESYSTEMS': { risk:'high', cat:'Storage', threat:'Mount/unmount file systems — low-level storage manipulation' },
+
+  // ── PACKAGE / APP MANAGEMENT ─────────────────────────────────────
+  'REQUEST_INSTALL_PACKAGES': { risk:'critical', cat:'Packages', threat:'Install arbitrary APKs — dropper, secondary payload delivery' },
+  'INSTALL_PACKAGES':         { risk:'critical', cat:'Packages', threat:'Silently install packages — malware dropper (system-level)' },
+  'DELETE_PACKAGES':          { risk:'high',     cat:'Packages', threat:'Uninstall other apps — delete security/AV software' },
+  'CHANGE_COMPONENT_ENABLED_STATE': { risk:'high', cat:'Packages', threat:'Enable/disable app components — AV evasion, persistence' },
+  'SET_PREFERRED_APPLICATIONS': { risk:'medium', cat:'Packages', threat:'Override default app associations' },
+  'QUERY_ALL_PACKAGES':       { risk:'medium',   cat:'Packages', threat:'Enumerate all installed apps — recon, AV detection' },
+  'PACKAGE_USAGE_STATS':      { risk:'high',     cat:'Packages', threat:'Access detailed app usage stats — behavioral fingerprinting' },
+  'CLEAR_APP_CACHE':          { risk:'medium',   cat:'Packages', threat:'Clear cache of other apps — data destruction / evidence removal' },
+
+  // ── DEVICE ADMIN / SYSTEM ────────────────────────────────────────
+  'BIND_DEVICE_ADMIN':         { risk:'critical', cat:'Admin',  threat:'Device Administrator binding — ransomware lock, MDM abuse' },
+  'BIND_ACCESSIBILITY_SERVICE':{ risk:'critical', cat:'Admin',  threat:'Accessibility service — keylogging, UI automation, overlay attacks' },
+  'SYSTEM_ALERT_WINDOW':       { risk:'critical', cat:'Admin',  threat:'Draw over other apps — phishing overlays, UI spoofing' },
+  'DISABLE_KEYGUARD':          { risk:'high',     cat:'Admin',  threat:'Disable screen lock — bypass authentication' },
+  'HIDE_OVERLAY_WINDOWS':      { risk:'medium',   cat:'Admin',  threat:'Hide overlay windows from other apps' },
+  'WRITE_SETTINGS':            { risk:'high',     cat:'Admin',  threat:'Modify global system settings — persistence, config tampering' },
+  'WRITE_SECURE_SETTINGS':     { risk:'critical', cat:'Admin',  threat:'Modify secure system settings — requires MiTM or system app' },
+  'WRITE_GSERVICES':           { risk:'high',     cat:'Admin',  threat:'Modify Google services config — requires system privileges' },
+  'UPDATE_DEVICE_STATS':       { risk:'medium',   cat:'Admin',  threat:'Update device statistics — requires system privileges' },
+  'SIGNAL_PERSISTENT_PROCESSES':{ risk:'high',   cat:'Admin',  threat:'Keep processes alive — persistence, battery abuse' },
+  'SET_TIME':                  { risk:'medium',   cat:'Admin',  threat:'Change system time — log tampering, certificate bypass' },
+  'SET_TIME_ZONE':             { risk:'low',      cat:'Admin',  threat:'Change time zone' },
+  'FACTORY_TEST':              { risk:'high',     cat:'Admin',  threat:'Factory test mode access — deep system access' },
+  'DIAGNOSTIC':                { risk:'high',     cat:'Admin',  threat:'Access diagnostic interfaces — system-level data exposure' },
+  'DUMP':                      { risk:'critical', cat:'Admin',  threat:'Dump app state/memory — credential extraction from other apps' },
+  'STATUS_BAR':                { risk:'medium',   cat:'Admin',  threat:'Expand/collapse status bar' },
+  'READ_LOGS':                 { risk:'critical', cat:'Admin',  threat:'Read system logs — extract credentials, tokens, sensitive data from log output' },
+  'ACCESS_CHECKIN_PROPERTIES': { risk:'medium',   cat:'Admin',  threat:'Access device checkin properties' },
+  'CHANGE_CONFIGURATION':      { risk:'medium',   cat:'Admin',  threat:'Change device configuration — locale, orientation attacks' },
+
+  // ── NETWORK ──────────────────────────────────────────────────────
+  'INTERNET':                  { risk:'warning',  cat:'Network', threat:'Internet access — required for any network-based attack' },
+  'CHANGE_NETWORK_STATE':      { risk:'warning',  cat:'Network', threat:'Toggle network connectivity — DoS, forced WiFi switching' },
+  'CHANGE_WIFI_STATE':         { risk:'warning',  cat:'Network', threat:'Connect/disconnect WiFi networks — forced network change' },
+  'ACCESS_WIFI_STATE':         { risk:'warning',  cat:'Network', threat:'Read WiFi network info — location inference via SSIDs' },
+  'ACCESS_NETWORK_STATE':      { risk:'warning',  cat:'Network', threat:'Check network connectivity state' },
+  'NFC':                       { risk:'medium',   cat:'Network', threat:'NFC access — contactless payment relay, badge cloning' },
+
+  // ── BLUETOOTH ────────────────────────────────────────────────────
+  'BLUETOOTH_SCAN':            { risk:'medium',   cat:'Bluetooth', threat:'Scan for Bluetooth devices — proximity tracking' },
+  'BLUETOOTH_CONNECT':         { risk:'medium',   cat:'Bluetooth', threat:'Connect to Bluetooth devices — data exfil via BT' },
+  'BLUETOOTH':                 { risk:'warning',  cat:'Bluetooth', threat:'Bluetooth communication' },
+  'BLUETOOTH_ADMIN':           { risk:'warning',  cat:'Bluetooth', threat:'Bluetooth admin operations' },
+
+  // ── PERSISTENCE ──────────────────────────────────────────────────
+  'RECEIVE_BOOT_COMPLETED':    { risk:'warning',  cat:'Persistence', threat:'Auto-start on boot — persistent malware survival across reboots' },
+  'FOREGROUND_SERVICE':        { risk:'warning',  cat:'Persistence', threat:'Run persistent foreground service — survives app closure' },
+  'SCHEDULE_EXACT_ALARM':      { risk:'warning',  cat:'Persistence', threat:'Schedule exact alarms — periodic C2 check-in' },
+  'USE_EXACT_ALARM':           { risk:'warning',  cat:'Persistence', threat:'Exact alarm scheduling' },
+  'WAKE_LOCK':                 { risk:'warning',  cat:'Persistence', threat:'Prevent CPU sleep — battery drain, covert background activity' },
+  'KILL_BACKGROUND_PROCESSES': { risk:'medium',   cat:'Persistence', threat:'Kill other background processes — terminate AV/security apps' },
+
+  // ── MEDIA / UI ───────────────────────────────────────────────────
+  'READ_MEDIA_IMAGES':         { risk:'warning',  cat:'Media', threat:'Access photo library' },
+  'READ_MEDIA_VIDEO':          { risk:'warning',  cat:'Media', threat:'Access video library' },
+  'READ_MEDIA_AUDIO':          { risk:'warning',  cat:'Media', threat:'Access audio files' },
+  'EXPAND_STATUS_BAR':         { risk:'low',      cat:'UI',    threat:'Expand/collapse status bar' },
+  'SET_WALLPAPER':             { risk:'low',      cat:'UI',    threat:'Change device wallpaper' },
+  'REORDER_TASKS':             { risk:'low',      cat:'UI',    threat:'Reorder app task stack' },
+  'GET_TASKS':                 { risk:'medium',   cat:'UI',    threat:'List running tasks — recon, overlay targeting' },
+  'BROADCAST_STICKY':          { risk:'low',      cat:'UI',    threat:'Send persistent broadcasts' },
+  'BIND_NOTIFICATION_LISTENER_SERVICE': { risk:'high', cat:'UI', threat:'Read all device notifications — OTP/credential interception from notifications' },
+  'USE_BIOMETRIC':             { risk:'warning',  cat:'Auth',  threat:'Biometric authentication' },
+  'USE_FINGERPRINT':           { risk:'warning',  cat:'Auth',  threat:'Fingerprint authentication' },
+  'VIBRATE':                   { risk:'low',      cat:'Other', threat:'Control vibration motor' },
+  'FLASHLIGHT':                { risk:'warning',  cat:'Other', threat:'Control camera flashlight' },
+  'MODIFY_AUDIO_SETTINGS':     { risk:'low',      cat:'Other', threat:'Modify audio volume/routing' },
+  'PERSISTENT_ACTIVITY':       { risk:'medium',   cat:'Other', threat:'Mark activity as persistent — hard to kill' },
+  'RESTART_PACKAGES':          { risk:'medium',   cat:'Other', threat:'Force-stop other apps' },
+};
+
+// Build derived sets for quick lookup
+const DANGEROUS_PERMS = new Set(Object.entries(PERM_INTEL)
+  .filter(([,v]) => ['critical','high'].includes(v.risk))
+  .map(([k]) => k));
+const WARNING_PERMS = new Set(Object.entries(PERM_INTEL)
+  .filter(([,v]) => ['warning','medium'].includes(v.risk))
+  .map(([k]) => k));
+
+// High-risk permission combinations (combo = extra alert)
+const PERM_COMBOS = [
+  {
+    id:'sms_intercept_combo',
+    perms:['RECEIVE_SMS','READ_SMS','SEND_SMS'],
+    required:2,
+    sev:'critical',
+    label:'Full SMS Control Combo',
+    threat:'Receive + Read + Send SMS — complete OTP interception and premium fraud capability. Core banking trojan signature.'
+  },
+  {
+    id:'location_surveillance_combo',
+    perms:['ACCESS_FINE_LOCATION','ACCESS_BACKGROUND_LOCATION','RECORD_AUDIO'],
+    required:2,
+    sev:'critical',
+    label:'Covert Surveillance Combo',
+    threat:'Fine location + background tracking + microphone — full real-world surveillance kit. Indicative of stalkerware.'
+  },
+  {
+    id:'device_takeover_combo',
+    perms:['BIND_DEVICE_ADMIN','BIND_ACCESSIBILITY_SERVICE','SYSTEM_ALERT_WINDOW'],
+    required:2,
+    sev:'critical',
+    label:'Device Takeover Combo',
+    threat:'Device Admin + Accessibility + Overlay — the classic ransomware and banking trojan privilege stack.'
+  },
+  {
+    id:'dropper_combo',
+    perms:['REQUEST_INSTALL_PACKAGES','INSTALL_PACKAGES','MANAGE_EXTERNAL_STORAGE'],
+    required:2,
+    sev:'critical',
+    label:'Dropper Capability Combo',
+    threat:'Install packages + full storage access — dropper pattern for second-stage payload delivery.'
+  },
+  {
+    id:'identity_harvest_combo',
+    perms:['READ_CONTACTS','GET_ACCOUNTS','READ_PHONE_STATE','READ_PHONE_NUMBERS'],
+    required:3,
+    sev:'high',
+    label:'Identity Harvesting Combo',
+    threat:'Full identity exfiltration kit: contacts + accounts + IMEI + phone number.'
+  },
+  {
+    id:'stealth_persistence_combo',
+    perms:['RECEIVE_BOOT_COMPLETED','FOREGROUND_SERVICE','WAKE_LOCK','KILL_BACKGROUND_PROCESSES'],
+    required:3,
+    sev:'high',
+    label:'Stealth Persistence Combo',
+    threat:'Boot persistence + foreground service + wake lock + kill competitors — maximally persistent malware footprint.'
+  },
+  {
+    id:'log_dump_combo',
+    perms:['READ_LOGS','DUMP','WRITE_SECURE_SETTINGS'],
+    required:2,
+    sev:'critical',
+    label:'System-Level Privilege Abuse Combo',
+    threat:'Log reading + memory dump + secure settings write — system-app level privilege. Extremely suspicious in sideloaded APKs.'
+  },
+  {
+    id:'call_intercept_combo',
+    perms:['PROCESS_OUTGOING_CALLS','READ_CALL_LOG','ANSWER_PHONE_CALLS','RECORD_AUDIO'],
+    required:2,
+    sev:'high',
+    label:'Call Interception Combo',
+    threat:'Intercept, redirect, and record phone calls.'
+  },
+  {
+    id:'notification_otp_combo',
+    perms:['BIND_NOTIFICATION_LISTENER_SERVICE','READ_SMS','RECEIVE_SMS'],
+    required:2,
+    sev:'critical',
+    label:'Dual-Channel OTP Theft Combo',
+    threat:'Notification listener + SMS access — captures OTPs via both SMS and push notification channels simultaneously.'
+  },
+];
+
+/* =====================================================================
+   DATA: DEX API PATTERNS
+===================================================================== */
+const DEX_PATTERNS = [
+  {p:/Runtime.*exec|ProcessBuilder/i,         sev:'high',  msg:'Dynamic code execution via Runtime.exec()/ProcessBuilder', cat:'RCE'},
+  {p:/DexClassLoader|PathClassLoader|dalvik\.system/i, sev:'high', msg:'Dynamic DEX class loading — dropper/loader technique', cat:'Dropper'},
+  {p:/getDeviceId|getImei|getSubscriberId/i,  sev:'high',  msg:'IMEI/device identifier harvesting', cat:'Spyware'},
+  {p:/sendTextMessage|sendMultipartTextMessage/i, sev:'high', msg:'Programmatic SMS sending — premium SMS fraud risk', cat:'Fraud'},
+  {p:/abortBroadcast/i,                       sev:'high',  msg:'SMS broadcast interception — OTP theft risk', cat:'Banking Trojan'},
+  {p:/TelephonyManager.*getLine1Number|getSimSerialNumber/i, sev:'high', msg:'SIM serial/phone number extraction', cat:'Spyware'},
+  {p:/Camera.*takePicture|MediaRecorder/i,    sev:'high',  msg:'Silent camera capture or audio recording', cat:'Spyware'},
+  {p:/getSystemService.*accessibility|AccessibilityService/i, sev:'high', msg:'Accessibility service abuse — keylogging risk', cat:'Spyware'},
+  {p:/DevicePolicyManager|lockNow|resetPassword/i, sev:'high', msg:'Device Policy Manager — ransomware/MDM abuse', cat:'Ransomware'},
+  {p:/getClipboardManager|setPrimaryClip|getPrimaryClip/i, sev:'high', msg:'Clipboard access — hijacking/crypto address swap risk', cat:'Fraud'},
+  {p:/PackageInstaller|installPackage/i,      sev:'high',  msg:'In-app package installation — dropper capability', cat:'Dropper'},
+  {p:/isDebuggerConnected|Debug\.isDebuggerConnected/i, sev:'high', msg:'Anti-debugging check', cat:'Evasion'},
+  {p:/Build\.FINGERPRINT.*generic|Build\.MODEL.*emulator/i, sev:'high', msg:'Emulator detection — sandbox evasion', cat:'Evasion'},
+  {p:/android\.accounts\.AccountManager/i,   sev:'high',  msg:'Account credential manager access', cat:'Credential Theft'},
+  {p:/WebView.*addJavascriptInterface|evaluateJavascript/i, sev:'high', msg:'WebView JS bridge injection risk', cat:'WebView Attack'},
+  {p:/TrustManager.*checkServerTrusted|X509Certificate.*\[\]/i, sev:'high', msg:'SSL certificate validation disabled — MITM risk', cat:'MITM Risk'},
+  {p:/Cipher\.(AES|DES|RC4)|MessageDigest\.(MD5|SHA1)/i, sev:'medium', msg:'Cryptographic operations detected (AES/DES/RC4/MD5)', cat:'Crypto'},
+  {p:/BASE64|Base64\.decode/i,               sev:'medium', msg:'Base64 encoding — possible payload obfuscation', cat:'Obfuscation'},
+  {p:/getInstalledPackages|getInstalledApplications/i, sev:'medium', msg:'Enumerating installed applications', cat:'Recon'},
+  {p:/LocationManager.*getLastKnownLocation|requestLocationUpdates/i, sev:'medium', msg:'Location tracking APIs', cat:'Tracking'},
+  {p:/ContentResolver.*Contacts/i,           sev:'medium', msg:'Contacts database access', cat:'Data Theft'},
+  {p:/native.*\.so|System\.loadLibrary|System\.load/i, sev:'medium', msg:'Native library loading — may hide analysis-resistant code', cat:'Evasion'},
+  {p:/SharedPreferences.*MODE_WORLD_READABLE|MODE_WORLD_WRITEABLE/i, sev:'medium', msg:'World-readable storage — data exposure risk', cat:'Data Exposure'},
+  {p:/DownloadManager|URLConnection.*openStream/i, sev:'medium', msg:'File download capability — payload delivery risk', cat:'Dropper'},
+  {p:/registerReceiver.*android\.intent\.action\.SCREEN/i, sev:'medium', msg:'Screen state monitoring', cat:'Spyware'},
+  {p:/KeyStore|KeyGenerator.*AES.*256/i,     sev:'medium', msg:'Android KeyStore usage — possible ransomware key storage', cat:'Crypto'},
+  {p:/getExternalStorageDirectory|getExternalFilesDir/i, sev:'medium', msg:'External storage read/write', cat:'Data Access'},
+  {p:/HttpURLConnection|OkHttpClient|Volley|Retrofit/i, sev:'low', msg:'Network HTTP client present', cat:'Network'},
+  {p:/WifiManager.*startScan|getScanResults/i, sev:'low', msg:'WiFi network scanning', cat:'Recon'},
+  {p:/BluetoothAdapter.*startDiscovery/i,    sev:'low',   msg:'Bluetooth device discovery', cat:'Recon'},
+  {p:/JobScheduler|AlarmManager.*setExact/i, sev:'low',   msg:'Background scheduling / persistence mechanism', cat:'Persistence'},
+  {p:/PowerManager.*wakeLock/i,              sev:'low',   msg:'Wake lock — device sleep prevention', cat:'Persistence'},
+  {p:/Notification.*setContentText|NotificationManager/i, sev:'low', msg:'Notification posting capability', cat:'Adware'},
+  {p:/Binder|IBinder.*transact/i,            sev:'low',   msg:'Direct Binder IPC usage', cat:'IPC'},
+];
+
+const SUSPICIOUS_INTENTS = [
+  'BOOT_COMPLETED','RECEIVE_SMS','SMS_RECEIVED','SMS_DELIVER','PHONE_STATE',
+  'NEW_OUTGOING_CALL','SCREEN_ON','SCREEN_OFF','USER_PRESENT','CONNECTIVITY_CHANGE',
+  'PACKAGE_ADDED','PACKAGE_REMOVED','ACTION_POWER_CONNECTED','ACTION_POWER_DISCONNECTED',
+  'BATTERY_LOW','LOCKED_BOOT_COMPLETED'
+];
+
+/* =====================================================================
+   DATA: YARA-EQUIVALENT RULES
+   Each rule: id, family, name, description, strings (regex array), required (min matches)
+===================================================================== */
+const YARA_RULES = [
+  {
+    id:'anubis_banking',
+    family:'Banking Trojan',
+    name:'Anubis_Banking_Trojan',
+    description:'Anubis is a sophisticated Android banking trojan that steals credentials via overlay attacks and keylogging through accessibility abuse.',
+    strings:[/anubis/i,/bankbot/i,/overlayservice/i,/keylogger/i,/getwindowmanager.*overlay/i,/smsmanager.*anubis/i],
+    required:2
+  },
+  {
+    id:'cerberus_rat',
+    family:'RAT / Banking Trojan',
+    name:'Cerberus_Android_RAT',
+    description:'Cerberus Android RAT with banking overlay capability, contact/SMS theft, and remote C2 control.',
+    strings:[/cerberus/i,/overlayservice/i,/stealcontacts/i,/stealsms/i,/remotecmd/i,/injectservice/i],
+    required:2
+  },
+  {
+    id:'spynote_rat',
+    family:'RAT',
+    name:'SpyNote_RAT',
+    description:'SpyNote is a full-featured Android RAT delivering live camera/microphone streaming, GPS tracking, and file exfiltration.',
+    strings:[/spynote/i,/spymax/i,/com\.fx\.rat/i,/livecamera/i,/micstream/i,/filexfil/i,/commandserver/i],
+    required:2
+  },
+  {
+    id:'hydra_banker',
+    family:'Banking Trojan',
+    name:'Hydra_Banking_Trojan',
+    description:'Hydra targets European banking apps using overlay attacks combined with credential harvesting and 2FA bypass via SMS interception.',
+    strings:[/hydra/i,/com\.brndmr/i,/injectpage/i,/grabsms/i,/fakepage/i,/overlayactivity.*bank/i],
+    required:2
+  },
+  {
+    id:'flubot',
+    family:'Banking Trojan / Spyware',
+    name:'FluBot_Spyware',
+    description:'FluBot spreads via smishing, steals banking credentials and contact lists, and hijacks notification access.',
+    strings:[/flubot/i,/cabassous/i,/com\.lm\.[a-z]{4,}/i,/notificationlistener.*flubot/i,/smishing/i,/contactstealer/i],
+    required:2
+  },
+  {
+    id:'joker_malware',
+    family:'Premium Dialer / Spyware',
+    name:'Joker_Premium_Dialer',
+    description:'Joker subscribes victims to premium WAP services silently, steals SMS for OTP capture, and exfiltrates contact lists.',
+    strings:[/joker/i,/wap.*subscribe/i,/premiumservice/i,/silentsubscribe/i,/com\.fool/i,/wapclick/i],
+    required:2
+  },
+  {
+    id:'xloader',
+    family:'Banking Trojan',
+    name:'XLoader_Android_Banker',
+    description:'XLoader (MoqHao) delivers phishing pages via SMS, harvests Apple/Google credentials and banking info.',
+    strings:[/xloader/i,/moqhao/i,/phishing.*bank/i,/fakecertificate/i,/appleid.*phish/i],
+    required:2
+  },
+  {
+    id:'dropper_generic',
+    family:'Dropper',
+    name:'Generic_APK_Dropper',
+    description:'Generic dropper pattern: loads secondary DEX from assets/network at runtime to evade static detection.',
+    strings:[/DexClassLoader/i,/getAssets.*open/i,/loadDex/i,/secondstage/i,/payload\.dex/i,/dropbinary/i],
+    required:3
+  },
+  {
+    id:'keylogger_generic',
+    family:'Spyware',
+    name:'Generic_Keylogger',
+    description:'Keylogger pattern using accessibility events to capture all typed text across applications.',
+    strings:[/onAccessibilityEvent/i,/TYPE_VIEW_TEXT_CHANGED/i,/getText.*accessibility/i,/keylog/i,/keystroke/i],
+    required:2
+  },
+  {
+    id:'ransomware_locker',
+    family:'Ransomware',
+    name:'Android_Screen_Locker',
+    description:'Screen-locking ransomware that abuses device admin API to lock the device and demand payment.',
+    strings:[/DevicePolicyManager/i,/lockNow/i,/resetPassword/i,/ransom/i,/bitcoin.*pay/i,/unlock.*btc/i],
+    required:3
+  },
+  {
+    id:'stalkerware',
+    family:'Stalkerware',
+    name:'Android_Stalkerware',
+    description:'Commercial or malicious stalkerware performing covert tracking of location, calls, SMS, and media.',
+    strings:[/stalk/i,/hidden.*tracking/i,/covert.*location/i,/spy.*sms/i,/monitor.*call/i,/silent.*record/i],
+    required:2
+  },
+  {
+    id:'adware_aggressive',
+    family:'Adware',
+    name:'Aggressive_Adware',
+    description:'Aggressive adware displaying out-of-app fullscreen ads, harvesting device identifiers for ad profiling.',
+    strings:[/fullscreenad/i,/adpopup/i,/showinterstitial/i,/getadid/i,/advertisingid/i,/adsdk.*aggressive/i],
+    required:2
+  }
+];
+
+/* =====================================================================
+   YARA ENGINE: scan dex string content against rules
+===================================================================== */
+function runYaraScan(dexStr) {
+  const hits = [];
+  for (const rule of YARA_RULES) {
+    let matchCount = 0;
+    const matched = [];
+    for (const str of rule.strings) {
+      if (str.test(dexStr)) { matchCount++; matched.push(str.source); }
+    }
+    if (matchCount >= rule.required) {
+      hits.push({ ...rule, matchedStrings: matched, matchCount });
+    }
+  }
+  return hits;
+}
+
+/* =====================================================================
+   OWASP MASVS ENGINE
+===================================================================== */
+function runMasvs(manifestStrings, manifestRaw, dexStr, permissions, allowBackup, fileList) {
+  const results = [];
+
+  // MASVS-STORAGE-1: allowBackup
+  const backupState = allowBackup;
+  results.push({
+    control:'MASVS-STORAGE-1',
+    title:'Insecure data backup',
+    status: backupState === 'true' ? 'fail' : backupState === 'false' ? 'pass' : 'warn',
+    desc: backupState === 'true'
+      ? 'android:allowBackup="true" — app data can be extracted via adb backup without root.'
+      : backupState === 'false'
+      ? 'android:allowBackup="false" — backup disabled correctly.'
+      : 'android:allowBackup not explicitly set — defaults to true on older SDKs.'
+  });
+
+  // MASVS-STORAGE-2: sensitive data in external storage
+  if (dexStr.match(/getExternalStorageDirectory|getExternalFilesDir|Environment\.DIRECTORY/i)) {
+    results.push({
+      control:'MASVS-STORAGE-2',
+      title:'Sensitive data on external storage',
+      status:'fail',
+      desc:'App writes to external storage (world-readable on older Android). Sensitive data may be exposed to other apps.',
+      detail:'API: getExternalStorageDirectory / getExternalFilesDir'
+    });
+  } else {
+    results.push({ control:'MASVS-STORAGE-2', title:'External storage usage', status:'pass', desc:'No external storage write APIs detected.' });
+  }
+
+  // MASVS-STORAGE-3: SharedPreferences world-readable
+  if (dexStr.match(/MODE_WORLD_READABLE|MODE_WORLD_WRITEABLE/i)) {
+    results.push({ control:'MASVS-STORAGE-3', title:'World-readable SharedPreferences', status:'fail', desc:'MODE_WORLD_READABLE/WRITEABLE — any app on the device can read app preferences.' });
+  }
+
+  // MASVS-CRYPTO-1: broken algorithms
+  const brokenCrypto = [];
+  if (/MessageDigest.*MD5|\.getInstance.*MD5/i.test(dexStr)) brokenCrypto.push('MD5');
+  if (/MessageDigest.*SHA.?1|\.getInstance.*SHA.?1/i.test(dexStr)) brokenCrypto.push('SHA-1');
+  if (/Cipher.*DES[^3]|getInstance.*DES[^3]/i.test(dexStr)) brokenCrypto.push('DES');
+  if (/Cipher.*RC4|getInstance.*RC4/i.test(dexStr)) brokenCrypto.push('RC4');
+  if (/ECB/i.test(dexStr)) brokenCrypto.push('AES-ECB');
+  if (brokenCrypto.length > 0) {
+    results.push({ control:'MASVS-CRYPTO-1', title:'Broken/weak cryptographic algorithms', status:'fail', desc:`Deprecated or broken cryptographic algorithms detected: ${brokenCrypto.join(', ')}. These provide weak or no real security.`, detail: brokenCrypto.join(', ') });
+  } else {
+    results.push({ control:'MASVS-CRYPTO-1', title:'Cryptographic algorithms', status:'pass', desc:'No known broken algorithms detected.' });
+  }
+
+  // MASVS-CRYPTO-2: hardcoded keys
+  const hardkeyRx = /(?:key|secret|password|passwd|token)\s*[=:]\s*["'][A-Za-z0-9+/=]{8,}["']/i;
+  if (hardkeyRx.test(dexStr)) {
+    results.push({ control:'MASVS-CRYPTO-2', title:'Hardcoded cryptographic key or secret', status:'fail', desc:'Potential hardcoded key/password/token string found in DEX bytecode. Keys embedded in code are trivially extractable.' });
+  }
+
+  // MASVS-NETWORK-1: cleartext HTTP
+  const httpCount = (dexStr.match(/http:\/\/[a-z0-9]/gi)||[]).length;
+  if (httpCount > 0) {
+    results.push({ control:'MASVS-NETWORK-1', title:'Cleartext HTTP traffic', status: httpCount > 3 ? 'fail' : 'warn', desc:`${httpCount} cleartext HTTP URL(s) found — data transmitted without TLS encryption.` });
+  } else {
+    results.push({ control:'MASVS-NETWORK-1', title:'Cleartext HTTP traffic', status:'pass', desc:'No cleartext HTTP URLs detected in DEX.' });
+  }
+
+  // MASVS-NETWORK-2: SSL pinning bypass
+  if (/TrustManager.*checkServerTrusted|X509TrustManager|hostnameVerifier.*return.*true/i.test(dexStr)) {
+    results.push({ control:'MASVS-NETWORK-2', title:'SSL/TLS certificate validation disabled', status:'fail', desc:'Custom TrustManager or HostnameVerifier detected that may accept all certificates, enabling MITM attacks.' });
+  } else {
+    results.push({ control:'MASVS-NETWORK-2', title:'SSL/TLS validation', status:'pass', desc:'No certificate validation bypass detected.' });
+  }
+
+  // MASVS-PLATFORM-1: exported components
+  const exportedComponents = [];
+  if (manifestRaw) {
+    const compTypes = ['activity','service','receiver','provider'];
+    compTypes.forEach(type => {
+      const rx = new RegExp(`<${type}[^>]+android:exported="true"[^>]*android:name="([^"]+)"`, 'gi');
+      const rx2 = new RegExp(`<${type}[^>]+android:name="([^"]+)"[^>]+android:exported="true"`, 'gi');
+      let m;
+      while ((m = rx.exec(manifestRaw)) !== null) exportedComponents.push({ type, name: m[1] });
+      while ((m = rx2.exec(manifestRaw)) !== null) exportedComponents.push({ type, name: m[1] });
+    });
+  }
+  if (exportedComponents.length > 0) {
+    results.push({
+      control:'MASVS-PLATFORM-1',
+      title:`Exported components (${exportedComponents.length})`,
+      status: exportedComponents.length > 3 ? 'fail' : 'warn',
+      desc:`${exportedComponents.length} component(s) with android:exported="true" — accessible by any app on the device without permission.`,
+      detail: exportedComponents.map(c=>`${c.type}: ${c.name}`).join(' | ')
+    });
+  } else {
+    results.push({ control:'MASVS-PLATFORM-1', title:'Exported components', status:'pass', desc:'No dangerously exported components detected.' });
+  }
+
+  // MASVS-PLATFORM-2: dangerous permissions without justification
+  const dangerCount = permissions.filter(p => DANGEROUS_PERMS.has(p)).length;
+  if (dangerCount > 8) {
+    results.push({ control:'MASVS-PLATFORM-2', title:'Excessive dangerous permissions', status:'fail', desc:`App requests ${dangerCount} dangerous permissions — significantly beyond typical app needs.`, detail:`Count: ${dangerCount}` });
+  } else if (dangerCount > 3) {
+    results.push({ control:'MASVS-PLATFORM-2', title:'Elevated permission usage', status:'warn', desc:`App requests ${dangerCount} dangerous permissions. Verify each is justified by app functionality.` });
+  } else {
+    results.push({ control:'MASVS-PLATFORM-2', title:'Permission usage', status:'pass', desc:`${dangerCount} dangerous permissions — within typical range.` });
+  }
+
+  // MASVS-RESILIENCE-1: root detection / integrity check absence
+  const hasRootCheck = /RootBeer|rootCheck|isRooted|su.*binary|busybox|SuperSU|Magisk/i.test(dexStr);
+  const hasIntegrityCheck = /SafetyNet|PlayIntegrity|AttestationResult|verifyApps/i.test(dexStr);
+  const hasDebugCheck = /isDebuggerConnected|BuildConfig\.DEBUG/i.test(dexStr);
+  if (!hasRootCheck && !hasIntegrityCheck) {
+    results.push({ control:'MASVS-RESILIENCE-1', title:'No root/integrity detection', status:'warn', desc:'No root detection or Play Integrity API usage found. For sensitive apps (banking), this is a compliance gap.' });
+  } else {
+    results.push({ control:'MASVS-RESILIENCE-1', title:'Root/integrity detection', status:'pass', desc:'Root or Play Integrity checks detected.' });
+  }
+
+  // MASVS-RESILIENCE-2: anti-debugging
+  if (!hasDebugCheck) {
+    results.push({ control:'MASVS-RESILIENCE-2', title:'No anti-debugging measures', status:'warn', desc:'No debugger detection found. Sensitive apps should detect debugger attachment.' });
+  } else {
+    results.push({ control:'MASVS-RESILIENCE-2', title:'Anti-debugging', status:'pass', desc:'Debugger detection present.' });
+  }
+
+  // MASVS-RESILIENCE-3: obfuscation
+  const hasObfusc = /ProGuard|R8|DexGuard/i.test(dexStr);
+  const singleCharClasses = (dexStr.match(/L[a-z]\/[a-z]\/[a-z];/g)||[]).length;
+  if (!hasObfusc && singleCharClasses < 10) {
+    results.push({ control:'MASVS-RESILIENCE-3', title:'Code not obfuscated', status:'warn', desc:'No obfuscation detected. Code may be trivially reverse-engineered.' });
+  } else {
+    results.push({ control:'MASVS-RESILIENCE-3', title:'Code obfuscation', status:'pass', desc:`Obfuscation detected (${singleCharClasses} single-char class patterns).` });
+  }
+
+  return results;
+}
+
+/* =====================================================================
+   SQLITE ANALYSIS ENGINE
+===================================================================== */
+const SQLITE_MAGIC = [0x53,0x51,0x4C,0x69,0x74,0x65,0x20,0x66,0x6F,0x72,0x6D,0x61,0x74,0x20,0x33,0x00];
+const SQLCIPHER_SALT_SIZE = 16;
+
+const PII_COLUMN_PATTERNS = [
+  {rx:/\b(email|mail|e_mail)\b/i, label:'Email'},
+  {rx:/\b(phone|mobile|cell|tel)\b/i, label:'Phone'},
+  {rx:/\b(password|passwd|pass|pwd|secret)\b/i, label:'Password'},
+  {rx:/\b(username|user_name|login|loginid)\b/i, label:'Username'},
+  {rx:/\b(ssn|social_security|national_id|nid)\b/i, label:'SSN/National ID'},
+  {rx:/\b(credit_card|cc_num|card_number|cvv|cvc)\b/i, label:'Credit Card'},
+  {rx:/\b(dob|date_of_birth|birthdate|birthday)\b/i, label:'Date of Birth'},
+  {rx:/\b(address|street|city|zip|postcode)\b/i, label:'Address'},
+  {rx:/\b(token|auth_token|access_token|session)\b/i, label:'Auth Token'},
+  {rx:/\b(private_key|priv_key|secret_key|api_key)\b/i, label:'Private/API Key'},
+  {rx:/\b(imei|device_id|android_id)\b/i, label:'Device ID'},
+  {rx:/\b(latitude|longitude|location|gps)\b/i, label:'Location'},
+  {rx:/\b(account|bank|iban|swift|routing)\b/i, label:'Banking'},
+];
+
+function analyzeSQLiteDB(name, bytes) {
+  const magic = Array.from(bytes.slice(0, 16));
+  const isSQLite = SQLITE_MAGIC.every((b, i) => magic[i] === b);
+
+  if (!isSQLite) {
+    const firstBytes = bytes.slice(0, 4);
+    const isEncrypted = !SQLITE_MAGIC.every((b, i) => (bytes[i]||0) === b);
+    const looksEncrypted = firstBytes[0] !== 0x53 && bytes[0] !== 0x00;
+    return {
+      name, encrypted: true, type: 'SQLCipher/encrypted',
+      tables: [], piiColumns: [],
+      note: 'Non-standard header — file is encrypted (SQLCipher or custom encryption). Contents not accessible.'
+    };
+  }
+
+  const decoder = new TextDecoder('latin1');
+  const content = decoder.decode(bytes);
+  const tables = [];
+  const tableRx = /CREATE TABLE[^(]+\(([^;]+)\)/gi;
+  const nameRx = /CREATE TABLE\s+(?:IF NOT EXISTS\s+)?["'`]?(\w+)["'`]?/gi;
+  let m, nm;
+  const tableNames = [];
+  while ((nm = nameRx.exec(content)) !== null) tableNames.push(nm[1]);
+  while ((m = tableRx.exec(content)) !== null) {
+    const cols = m[1].split(',').map(c => c.trim().split(/\s+/)[0].replace(/["`']/g,''));
+    tables.push(cols);
+  }
+
+  const allCols = tables.flat();
+  const piiFound = [];
+  PII_COLUMN_PATTERNS.forEach(pat => {
+    const matching = allCols.filter(c => pat.rx.test(c));
+    if (matching.length > 0) piiFound.push({ label: pat.label, columns: matching });
+  });
+
+  return {
+    name, encrypted: false, type: 'SQLite plaintext',
+    tableCount: Math.max(tableNames.length, tables.length),
+    tableNames: tableNames.slice(0, 20),
+    totalColumns: allCols.length,
+    piiColumns: piiFound,
+    note: piiFound.length > 0 ? 'PII column names found in plaintext database — user data may be stored unencrypted.' : 'No obvious PII columns detected.'
+  };
+}
+
+/* =====================================================================
+   APK SIGNATURE ANALYSIS
+===================================================================== */
+function analyzeSignature(fileList, zip) {
+  const metaFiles = fileList.filter(f => f.startsWith('META-INF/'));
+  const hasSF = metaFiles.some(f => f.endsWith('.SF'));
+  const hasRSA = metaFiles.some(f => f.endsWith('.RSA') || f.endsWith('.DSA') || f.endsWith('.EC'));
+  const hasMF = metaFiles.some(f => f === 'META-INF/MANIFEST.MF');
+
+  if (!hasMF && !hasSF) return { status:'unsigned', label:'UNSIGNED — no signature present', sev:'high' };
+  if (!hasRSA) return { status:'malformed', label:'Malformed signature (SF without RSA block)', sev:'high' };
+
+  const sigFiles = metaFiles.filter(f => f.endsWith('.RSA')||f.endsWith('.DSA'));
+  const isDebugKey = sigFiles.some(f => f.toLowerCase().includes('debug') || f.toLowerCase().includes('test'));
+  const isAOSP = sigFiles.some(f => f === 'META-INF/CERT.RSA');
+
+  if (isDebugKey) return { status:'debug', label:'DEBUG KEY SIGNATURE — repackaged or test build', sev:'high' };
+  return { status:'signed', label:`Signed (${sigFiles[0]||'CERT.RSA'})`, sev:'ok' };
+}
+
+/* =====================================================================
+   MALFORMED ZIP DETECTION
+===================================================================== */
+function detectMalformedZip(bytes) {
+  const flags = [];
+  const view = new DataView(bytes.buffer || bytes);
+  const sig = view.getUint32(0, true);
+  if (sig !== 0x04034b50) flags.push({ sev:'high', msg:'Invalid ZIP local file header signature — anti-analysis or corrupted APK' });
+
+  const size = bytes.length;
+  let eocdFound = false;
+  for (let i = size - 22; i >= Math.max(0, size - 65558); i--) {
+    if (view.getUint32(i, true) === 0x06054b50) { eocdFound = true; break; }
+  }
+  if (!eocdFound) flags.push({ sev:'high', msg:'No End-Of-Central-Directory record — ZIP structure malformed, may defeat static tools' });
+
+  if (size > 50 * 1024 * 1024) flags.push({ sev:'medium', msg:`Very large APK (${(size/1024/1024).toFixed(1)} MB) — may contain embedded payloads or asset-packed malware` });
+
+  return flags;
+}
+
+/* =====================================================================
+   AXML BINARY MANIFEST PARSER
+===================================================================== */
+function parseAXML(buffer) {
+  const data = new DataView(buffer);
+  const magic = data.getUint32(0, true);
+  if (magic !== 0x00080003) return { strings: null, raw: null };
+  const strings = [];
+  const stringCount = data.getUint32(20, true);
+  const stringsStart = data.getUint32(24, true);
+  const offsets = [];
+  for (let i = 0; i < stringCount; i++) offsets.push(data.getUint32(28 + i * 4, true));
+  for (let i = 0; i < stringCount; i++) {
+    const off = stringsStart + offsets[i] + 8;
+    if (off + 2 > buffer.byteLength) { strings.push(''); continue; }
+    const len = data.getUint16(off, true);
+    let s = '';
+    for (let j = 0; j < len && off + 2 + j*2 + 1 < buffer.byteLength; j++) {
+      const c = data.getUint16(off + 2 + j * 2, true);
+      if (c) s += String.fromCharCode(c);
+    }
+    strings.push(s);
+  }
+  const decoder = new TextDecoder('latin1');
+  const rawStr = decoder.decode(buffer);
+  return { strings, raw: rawStr };
+}
+
+function extractManifestInfo(strings) {
+  const def = { permissions:[], activities:[], services:[], receivers:[], providers:[], pkg:'Unknown', minSdk:'N/A', targetSdk:'N/A', allowBackup:'unknown', exportedComponents:[] };
+  if (!strings) return def;
+  const permissions=[], activities=[], services=[], receivers=[], providers=[];
+  let pkg='Unknown', allowBackup='unknown';
+  const sdkCandidates = [];
+
+  strings.forEach(s => {
+    if (!s) return;
+    // Permissions — android.permission.* AND custom permissions
+    if (s.startsWith('android.permission.')) {
+      const p = s.replace('android.permission.','');
+      if (!permissions.includes(p)) permissions.push(p);
+    } else if (s.includes('.permission.') && s.split('.').length >= 3) {
+      // Custom/OEM permissions (e.g. com.google.android.permission.*)
+      if (!permissions.includes(s)) permissions.push(s);
+    }
+    // Backup flag
+    if (s === 'true' || s === 'false') allowBackup = s;
+    // Components
+    if (s.endsWith('Activity') && s.includes('.') && !permissions.includes(s)) activities.push(s);
+    else if (s.endsWith('Service') && s.includes('.')) services.push(s);
+    else if ((s.endsWith('Receiver') || s.endsWith('BroadcastReceiver')) && s.includes('.')) receivers.push(s);
+    else if (s.endsWith('Provider') && s.includes('.')) providers.push(s);
+    // Package name — lowercase dotted, 3+ segments, no android namespace
+    if (/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){2,}$/.test(s) && !s.startsWith('android') && pkg === 'Unknown') pkg = s;
+    // SDK integers: 1–99
+    if (/^\d{1,2}$/.test(s)) {
+      const n = parseInt(s);
+      if (n >= 1 && n <= 99) sdkCandidates.push(n);
+    }
+  });
+
+  // SDK inference: sort candidates, minSdk = smallest plausible, targetSdk = largest
+  const sdksSorted = [...new Set(sdkCandidates)].sort((a,b)=>a-b);
+  const minSdk  = sdksSorted.length > 0 ? String(sdksSorted[0])  : 'N/A';
+  const targetSdk = sdksSorted.length > 1 ? String(sdksSorted[sdksSorted.length-1]) : (sdksSorted.length===1 ? String(sdksSorted[0]) : 'N/A');
+
+  return { permissions, activities, services, receivers, providers, pkg, minSdk, targetSdk, allowBackup };
+}
+
+/* =====================================================================
+   DEX ANALYSIS
+===================================================================== */
+function analyzeDex(dexBytes) {
+  const findings = [];
+  const magic = String.fromCharCode(...dexBytes.slice(0, 4));
+  if (!magic.startsWith('dex')) {
+    findings.push({ sev:'high', msg:'DEX magic bytes invalid — file may be packed or encrypted', cat:'Packer' });
+    return { findings, dexStr: '' };
+  }
+  const decoder = new TextDecoder('latin1');
+  const dexStr = decoder.decode(dexBytes);
+
+  DEX_PATTERNS.forEach(p => {
+    if (p.p.test(dexStr)) findings.push({ sev:p.sev, msg:p.msg, cat:p.cat });
+  });
+
+  SUSPICIOUS_INTENTS.forEach(intent => {
+    if (dexStr.includes(intent)) findings.push({ sev:'medium', msg:`Listens for broadcast intent: ${intent}`, cat:'Intent' });
+  });
+
+  const httpCount = (dexStr.match(/http:\/\/[a-z]/gi)||[]).length;
+  if (httpCount > 0) findings.push({ sev:'medium', msg:`${httpCount} cleartext HTTP URL(s) in bytecode`, cat:'Network' });
+
+  const ipRx = /\b(\d{1,3}\.){3}\d{1,3}\b/g;
+  const ips = [...new Set((dexStr.match(ipRx)||[]).filter(ip => !ip.startsWith('127.')&&!ip.startsWith('0.')&&!ip.startsWith('255.')))];
+  if (ips.length) findings.push({ sev:'high', msg:`Hardcoded IP address(es): ${ips.slice(0,6).join(', ')}`, cat:'C2' });
+
+  if (/[a-z2-7]{16,}\.onion/gi.test(dexStr)) findings.push({ sev:'high', msg:'Tor .onion domain — covert C2 channel', cat:'C2' });
+  if (/Telegram|t\.me\/|bot.*[A-Z0-9]{30,}/i.test(dexStr)) findings.push({ sev:'high', msg:'Telegram bot API — may be C2 channel', cat:'C2' });
+
+  const b64 = (dexStr.match(/[A-Za-z0-9+/]{100,}={0,2}/g)||[]);
+  if (b64.length > 3) findings.push({ sev:'medium', msg:`${b64.length} large Base64 blobs — potential embedded payloads`, cat:'Obfuscation' });
+
+  const entropy = (dexStr.match(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g)||[]).length / dexBytes.length;
+  if (entropy > 0.35) findings.push({ sev:'high', msg:'High binary entropy — code may be packed or encrypted', cat:'Packer' });
+
+  const shortCls = (dexStr.match(/L[a-z]\/[a-z]\/[a-z];/g)||[]).length;
+  if (shortCls > 30) findings.push({ sev:'medium', msg:`${shortCls} single-char obfuscated class names — strong obfuscation`, cat:'Obfuscation' });
+
+  return { findings, dexStr };
+}
+
+/* =====================================================================
+   MANIFEST PERMISSION ANALYSIS ENGINE
+   Returns structured findings from permission list + combos
+===================================================================== */
+function analyzePermissions(permissions) {
+  const findings = [];
+  const permSet = new Set(permissions);
+
+  // Per-permission findings for every dangerous/critical perm
+  permissions.forEach(perm => {
+    const intel = PERM_INTEL[perm];
+    if (!intel) return;
+    if (intel.risk === 'critical') {
+      findings.push({ sev:'high', msg:`[MANIFEST] ${perm}: ${intel.threat}`, cat:`Permission·${intel.cat}` });
+    } else if (intel.risk === 'high') {
+      findings.push({ sev:'medium', msg:`[MANIFEST] ${perm}: ${intel.threat}`, cat:`Permission·${intel.cat}` });
+    }
+  });
+
+  // Combo detection
+  const comboHits = [];
+  PERM_COMBOS.forEach(combo => {
+    const matched = combo.perms.filter(p => permSet.has(p));
+    if (matched.length >= combo.required) {
+      comboHits.push({ ...combo, matched });
+      findings.push({
+        sev: combo.sev === 'critical' ? 'high' : 'medium',
+        msg: `[COMBO] ${combo.label}: ${combo.threat} (matched: ${matched.join(', ')})`,
+        cat: 'Permission·Combo'
+      });
+    }
+  });
+
+  // Permission count thresholds
+  const dangerCount = permissions.filter(p => DANGEROUS_PERMS.has(p)).length;
+  if (dangerCount >= 15) {
+    findings.push({ sev:'high', msg:`[MANIFEST] Extreme permission count: ${dangerCount} dangerous permissions — far beyond any legitimate app. Strong malware indicator.`, cat:'Permission·Volume' });
+  } else if (dangerCount >= 8) {
+    findings.push({ sev:'medium', msg:`[MANIFEST] High dangerous permission count: ${dangerCount} — exceeds typical app needs.`, cat:'Permission·Volume' });
+  }
+
+  return { findings, comboHits };
+}
+
+/* =====================================================================
+===================================================================== */
+function scoreRisk(dexFindings, yaraHits, permissions, masvsFails, comboHits) {
+  let score = 0;
+  dexFindings.forEach(f => { if(f.sev==='high') score+=25; else if(f.sev==='medium') score+=12; else score+=4; });
+  score += yaraHits.length * 40;
+  score += permissions.filter(p => DANGEROUS_PERMS.has(p)).length * 7;
+  score += masvsFails.filter(m => m.status==='fail').length * 10;
+  if (comboHits) comboHits.forEach(c => { score += c.sev === 'critical' ? 45 : 25; });
+  if (score >= 100) return 'malicious';
+  if (score >= 40) return 'suspicious';
+  return 'clean';
+}
+
+/* =====================================================================
+   MAIN ANALYSIS ORCHESTRATOR
+===================================================================== */
+async function analyzeAPK(file) {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+
+  const sha256hash = await (async () => {
+    try { const h = await crypto.subtle.digest('SHA-256', buffer); return Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
+    catch(e) { return 'N/A'; }
+  })();
+
+  const zipFlags = detectMalformedZip(bytes);
+
+  let zip, fileList = [];
+  try {
+    zip = new JSZip();
+    await zip.loadAsync(buffer);
+    fileList = Object.keys(zip.files);
+  } catch(e) {
+    return {
+      name:file.name, size:file.size, sha256:sha256hash, verdict:'suspicious',
+      error:'ZIP parse failed — APK may be malformed/anti-analysis protected',
+      zipFlags, dexFindings:[], yaraHits:[], masvs:[], sqlite:[],
+      manifest:{permissions:[],activities:[],services:[],receivers:[],providers:[],pkg:'Parse Error',allowBackup:'unknown'},
+      dangerPerms:[], warnPerms:[], safePerms:[], signature:{status:'unknown',label:'Could not parse',sev:'warn'},
+      dexCount:0, totalDexSize:0, nativeLibs:[], scannedAt:new Date().toISOString()
+    };
+  }
+
+  const signature = analyzeSignature(fileList, zip);
+  const nativeLibs = fileList.filter(f => f.endsWith('.so'));
+  const dbFiles = fileList.filter(f => f.endsWith('.db') || f.endsWith('.sqlite') || f.endsWith('.db3'));
+
+  let manifestStrings = null, manifestRaw = null;
+  const manifestEntry = zip.files['AndroidManifest.xml'];
+  if (manifestEntry) {
+    const ab = await manifestEntry.async('arraybuffer');
+    const parsed = parseAXML(ab);
+    manifestStrings = parsed.strings;
+    manifestRaw = parsed.raw;
+  }
+
+  const manifest = extractManifestInfo(manifestStrings);
+
+  let allDexFindings = [], allDexStr = '', dexCount = 0, totalDexSize = 0;
+  const dexEntries = fileList.filter(f => /^classes\d*\.dex$/.test(f));
+  for (const dexName of dexEntries) {
+    dexCount++;
+    const ab = await zip.files[dexName].async('arraybuffer');
+    totalDexSize += ab.byteLength;
+    const { findings, dexStr } = analyzeDex(new Uint8Array(ab));
+    allDexFindings.push(...findings);
+    allDexStr += dexStr;
+  }
+  if (dexCount > 2) allDexFindings.push({ sev:'medium', msg:`MultiDex: ${dexCount} DEX files — complex/split application`, cat:'MultiDex' });
+  if (nativeLibs.length > 0) allDexFindings.push({ sev:'medium', msg:`${nativeLibs.length} native .so lib(s): ${nativeLibs.slice(0,4).join(', ')}`, cat:'Native' });
+
+  // Deduplicate DEX findings
+  const seen = new Set();
+  const dexFindings = allDexFindings.filter(f => { const k=f.msg.slice(0,45); if(seen.has(k)) return false; seen.add(k); return true; });
+
+  const yaraHits = runYaraScan(allDexStr);
+  const masvs = runMasvs(manifestStrings, manifestRaw, allDexStr, manifest.permissions, manifest.allowBackup, fileList);
+
+  // SQLite analysis
+  const sqlite = [];
+  for (const dbName of dbFiles) {
+    const ab = await zip.files[dbName].async('arraybuffer');
+    const analysis = analyzeSQLiteDB(dbName, new Uint8Array(ab));
+    sqlite.push(analysis);
+  }
+
+  const dangerPerms = manifest.permissions.filter(p => DANGEROUS_PERMS.has(p));
+  const warnPerms = manifest.permissions.filter(p => WARNING_PERMS.has(p) && !DANGEROUS_PERMS.has(p));
+  const safePerms = manifest.permissions.filter(p => !DANGEROUS_PERMS.has(p) && !WARNING_PERMS.has(p));
+
+  // Run deep manifest permission analysis
+  const { findings: permFindings, comboHits } = analyzePermissions(manifest.permissions);
+  // Merge permission findings into dex findings pool (they're manifest-sourced but same severity scale)
+  dexFindings.push(...permFindings);
+
+  const verdict = scoreRisk(dexFindings, yaraHits, manifest.permissions, masvs, comboHits);
+
+  return {
+    name:file.name, size:file.size, sha256:sha256hash, verdict,
+    manifest, dangerPerms, warnPerms, safePerms,
+    dexFindings, yaraHits, masvs, sqlite, zipFlags, signature,
+    comboHits, permFindings,
+    dexCount, totalDexSize, nativeLibs, fileList, scannedAt:new Date().toISOString()
+  };
+}
+
+/* =====================================================================
+   UI STATE
+===================================================================== */
+const queue=[], results=[];
+let scanning=false;
+let activeTab={};
+
+const dropZone=document.getElementById('dropZone');
+const fileInput=document.getElementById('fileInput');
+const btnScan=document.getElementById('btnScan');
+const btnExportJSON=document.getElementById('btnExportJSON');
+const btnExportCSV=document.getElementById('btnExportCSV');
+const btnClear=document.getElementById('btnClear');
+const queueList=document.getElementById('queueList');
+const resultsList=document.getElementById('resultsList');
+
+fileInput.addEventListener('change', e => addFiles(Array.from(e.target.files)));
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  addFiles(Array.from(e.dataTransfer.files).filter(f => f.name.endsWith('.apk')));
+});
+
+function addFiles(files) {
+  files.forEach(f => { if (!queue.find(q=>q.name===f.name&&q.size===f.size)) queue.push({file:f,name:f.name,size:f.size,status:'pending',id:Date.now()+Math.random()}); });
+  renderQueue();
+  btnScan.disabled=queue.length===0;
+  document.getElementById('queueSection').style.display=queue.length?'':'none';
+  document.getElementById('statsRow').style.display=queue.length?'':'none';
+  updateStats();
+}
+
+function fmt(b){return b<1024?b+' B':b<1048576?(b/1024).toFixed(1)+' KB':(b/1048576).toFixed(1)+' MB'}
+
+function renderQueue() {
+  queueList.innerHTML='';
+  queue.forEach(item => {
+    const el=document.createElement('div'); el.className='queue-item'; el.id='qi-'+item.id;
+    el.innerHTML=`<span class="q-name" title="${item.name}">${item.name}</span><span class="q-size">${fmt(item.size)}</span><span class="q-status ${item.status}">${item.status}</span>`;
+    queueList.appendChild(el);
+  });
+}
+
+function updateQueueItem(id, status) {
+  const el=document.getElementById('qi-'+id); if(!el) return;
+  const s=el.querySelector('.q-status'); s.className='q-status '+status; s.textContent=status;
+}
+
+function updateStats() {
+  document.getElementById('stTotal').textContent=queue.length;
+  document.getElementById('stMalicious').textContent=results.filter(r=>r.verdict==='malicious').length;
+  document.getElementById('stSuspicious').textContent=results.filter(r=>r.verdict==='suspicious').length;
+  document.getElementById('stClean').textContent=results.filter(r=>r.verdict==='clean').length;
+  document.getElementById('stYara').textContent=results.reduce((a,r)=>a+(r.yaraHits||[]).length,0);
+  document.getElementById('stMasvs').textContent=results.reduce((a,r)=>a+((r.masvs||[]).filter(m=>m.status==='fail').length),0);
+}
+
+btnScan.addEventListener('click', async () => {
+  if (scanning) return; scanning=true; btnScan.disabled=true;
+  results.length=0; resultsList.innerHTML='';
+  document.getElementById('progressContainer').style.display='';
+  document.getElementById('resultsSection').style.display='';
+  const pending=queue.filter(q=>!['clean','malicious','suspicious'].includes(q.status));
+  for (let i=0;i<pending.length;i++) {
+    const item=pending[i];
+    document.getElementById('overallBar').style.width=((i/pending.length)*100)+'%';
+    document.getElementById('progressLabel').textContent=`Scanning ${i+1}/${pending.length}: ${item.name}`;
+    updateQueueItem(item.id,'scanning');
+    try {
+      const r=await analyzeAPK(item.file);
+      results.push(r); item.status=r.verdict;
+      updateQueueItem(item.id,r.verdict);
+      renderResult(r);
+    } catch(e) { item.status='error'; updateQueueItem(item.id,'error'); }
+    updateStats();
+  }
+  document.getElementById('overallBar').style.width='100%';
+  document.getElementById('progressLabel').textContent=`Done — ${pending.length} file(s) analyzed`;
+  btnScan.disabled=false; btnExportJSON.disabled=false; btnExportCSV.disabled=false; scanning=false;
+});
+
+/* =====================================================================
+   RENDER RESULT CARD
+===================================================================== */
+function renderResult(r) {
+  const id = 'res-' + Date.now() + Math.random().toString(36).slice(2);
+  const card=document.createElement('div'); card.className='result-card';
+
+  const highC=r.dexFindings.filter(f=>f.sev==='high').length;
+  const medC=r.dexFindings.filter(f=>f.sev==='medium').length;
+  const lowC=r.dexFindings.filter(f=>f.sev==='low').length;
+  const masvsFails=(r.masvs||[]).filter(m=>m.status==='fail').length;
+  const masvsWarn=(r.masvs||[]).filter(m=>m.status==='warn').length;
+  const yaraCount=(r.yaraHits||[]).length;
+  const sqliteCount=(r.sqlite||[]).length;
+
+  const verdictLabel = r.verdict==='malicious'?'🔴 MALICIOUS':r.verdict==='suspicious'?'🟡 SUSPICIOUS':'🟢 CLEAN';
+  const sigClass = r.signature?.sev==='ok'?'sig-ok':r.signature?.sev==='high'?'sig-bad':'sig-warn';
+
+  card.innerHTML = `
+    <div class="result-header" onclick="toggleResult(this,'${id}')">
+      <span class="r-name">${r.name}</span>
+      <span style="font-size:10px;color:var(--text3);margin-right:6px">${highC}H ${medC}M ${lowC}L</span>
+      ${yaraCount>0?`<span style="font-size:10px;color:var(--red);margin-right:6px">YARA:${yaraCount}</span>`:''}
+      <span class="r-verdict ${r.verdict}">${verdictLabel}</span>
+      <span class="chevron">›</span>
+    </div>
+    <div class="result-body" id="${id}">
+      <div class="tab-bar">
+        <div class="tab active" onclick="switchTab('${id}','overview',this)">Overview</div>
+        <div class="tab" onclick="switchTab('${id}','yara',this)">YARA <span class="tab-badge ${yaraCount>0?'red':'blue'}">${yaraCount}</span></div>
+        <div class="tab" onclick="switchTab('${id}','masvs',this)">MASVS <span class="tab-badge ${masvsFails>0?'amber':'blue'}">${masvsFails}F ${masvsWarn}W</span></div>
+        <div class="tab" onclick="switchTab('${id}','dex',this)">DEX Findings <span class="tab-badge ${highC>0?'red':medC>0?'amber':'blue'}">${r.dexFindings.length}</span></div>
+        <div class="tab" onclick="switchTab('${id}','sqlite',this)">SQLite <span class="tab-badge ${sqliteCount>0?'teal':'blue'}">${sqliteCount}</span></div>
+        <div class="tab" onclick="switchTab('${id}','perms',this)">Permissions <span class="tab-badge ${r.dangerPerms.length>0?'red':'blue'}">${r.dangerPerms.length}D${(r.comboHits||[]).length>0?` ⚡${r.comboHits.length}C`:''}</span></div>
+      </div>
+
+      <div class="tab-content active" id="${id}-overview">
+        ${r.error?`<div class="finding high"><span class="sev">error</span><div class="msg">${r.error}</div></div>`:''}
+        ${(r.zipFlags||[]).map(f=>`<div class="finding ${f.sev}" style="margin-bottom:6px"><span class="sev">${f.sev}</span><div class="msg">${f.msg}</div></div>`).join('')}
+        <div class="finding-group" style="margin-top:12px">
+          <div class="finding-group-title">File Info</div>
+          <table class="meta-table">
+            <tr><td>Package</td><td>${r.manifest.pkg}</td></tr>
+            <tr><td>Size</td><td>${fmt(r.size)}</td></tr>
+            <tr><td>DEX Files</td><td>${r.dexCount} (${fmt(r.totalDexSize||0)} total)</td></tr>
+            <tr><td>Native Libs</td><td>${r.nativeLibs.length>0?r.nativeLibs.join(', '):'None'}</td></tr>
+            <tr><td>Min SDK</td><td>API ${r.manifest.minSdk}</td></tr>
+            <tr><td>Target SDK</td><td>API ${r.manifest.targetSdk}</td></tr>
+            <tr><td>Activities</td><td>${r.manifest.activities.length}</td></tr>
+            <tr><td>Services</td><td>${r.manifest.services.length}</td></tr>
+            <tr><td>Receivers</td><td>${r.manifest.receivers.length}</td></tr>
+            <tr><td>Providers</td><td>${r.manifest.providers.length}</td></tr>
+            <tr><td>Backup allowed</td><td>${r.manifest.allowBackup}</td></tr>
+            <tr><td>Perm combos hit</td><td style="color:${(r.comboHits||[]).length>0?'var(--red)':'var(--green)'}">${(r.comboHits||[]).length > 0 ? '⚡ ' + r.comboHits.length + ' — ' + r.comboHits.map(c=>c.label).join(', ') : '✓ None'}</td></tr>
+          </table>
+        </div>
+        <div class="finding-group">
+          <div class="finding-group-title">Signature</div>
+          <div class="hash-box">
+            Status &nbsp;<span class="${sigClass}">${r.signature?.label||'Unknown'}</span><br>
+            SHA-256 ${r.sha256}<br>
+            Scanned ${r.scannedAt}
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="${id}-yara">
+        ${yaraCount===0
+          ? `<div class="yara-clean">✓ No YARA signature matches — no known malware family fingerprints detected.</div>`
+          : (r.yaraHits||[]).map(h=>`
+            <div class="yara-match">
+              <div class="rule-name">${h.name}</div>
+              <div class="rule-family">Family: ${h.family} &bull; Matched ${h.matchCount}/${h.strings.length} strings</div>
+              <div class="rule-desc">${h.description}</div>
+              <div class="rule-strings">Matched patterns: ${h.matchedStrings.slice(0,5).join(' | ')}</div>
+            </div>`).join('')
+        }
+      </div>
+
+      <div class="tab-content" id="${id}-masvs">
+        ${(r.masvs||[]).map(m=>`
+          <div class="masvs-item ${m.status}">
+            <span class="masvs-ctrl">${m.control}</span>
+            <div>
+              <div class="masvs-title">${m.title}</div>
+              <div class="masvs-desc">${m.desc}</div>
+              ${m.detail?`<div class="masvs-detail">${m.detail}</div>`:''}
+            </div>
+          </div>`).join('')}
+      </div>
+
+      <div class="tab-content" id="${id}-dex">
+        ${r.dexFindings.length===0
+          ? `<div class="yara-clean">✓ No suspicious API patterns detected in DEX bytecode.</div>`
+          : r.dexFindings.sort((a,b)=>({high:3,medium:2,low:1,info:0}[b.sev])-({high:3,medium:2,low:1,info:0}[a.sev]))
+              .map(f=>`<div class="finding ${f.sev}"><span class="sev">${f.sev}</span><div><div class="msg">${f.msg}</div><div class="cat">${f.cat}</div></div></div>`).join('')
+        }
+      </div>
+
+      <div class="tab-content" id="${id}-sqlite">
+        ${sqliteCount===0
+          ? `<div style="color:var(--text2);font-size:12px;padding:10px 0">No .db / .sqlite files found inside this APK.</div>`
+          : (r.sqlite||[]).map(db=>`
+            <div class="sqlite-card">
+              <div class="sqlite-name">${db.name}</div>
+              <div class="sqlite-row"><span class="sqlite-key">Encryption</span><span class="sqlite-val ${db.encrypted?'sig-bad':'sig-ok'}">${db.type}</span></div>
+              ${!db.encrypted?`
+              <div class="sqlite-row"><span class="sqlite-key">Tables</span><span class="sqlite-val">${db.tableCount||0} (${(db.tableNames||[]).slice(0,6).join(', ')||'—'})</span></div>
+              <div class="sqlite-row"><span class="sqlite-key">Total columns</span><span class="sqlite-val">${db.totalColumns||0}</span></div>
+              <div class="sqlite-row"><span class="sqlite-key">PII columns found</span><span class="sqlite-val">
+                ${db.piiColumns.length>0
+                  ? db.piiColumns.map(p=>`<span class="sqlite-pii">⚠ ${p.label}: ${p.columns.join(', ')}</span>`).join('')
+                  : '<span style="color:var(--green)">None detected</span>'}
+              </span></div>`:''}
+              <div class="sqlite-row" style="margin-top:6px"><span class="sqlite-key">Note</span><span class="sqlite-val" style="color:var(--text2)">${db.note}</span></div>
+            </div>`).join('')
+        }
+      </div>
+
+      <div class="tab-content" id="${id}-perms">
+        <div style="color:var(--text2);font-size:11px;margin-bottom:12px">
+          ${r.dangerPerms.length} dangerous &bull; ${r.warnPerms.length} warning &bull; ${r.safePerms.length} normal &bull; ${r.manifest.permissions.length} total
+        </div>
+        ${(r.comboHits||[]).length>0?`
+        <div class="finding-group-title" style="margin-bottom:8px">⚡ High-Risk Combinations Detected</div>
+        ${(r.comboHits||[]).map(c=>`
+          <div class="finding ${c.sev==='critical'?'high':'medium'}" style="margin-bottom:6px;flex-direction:column;gap:6px">
+            <div style="display:flex;gap:8px;align-items:center"><span class="sev">${c.sev}</span><strong style="font-size:12px;color:var(--text)">${c.label}</strong></div>
+            <div class="msg">${c.threat}</div>
+            <div class="cat">Matched permissions: ${c.matched.join(' + ')}</div>
+          </div>`).join('')}
+        <div style="height:12px"></div>`:``}
+        ${r.dangerPerms.length>0?`
+        <div class="finding-group-title" style="margin-bottom:8px">🔴 Critical / High-Risk Permissions (${r.dangerPerms.length})</div>
+        <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px">
+          ${r.dangerPerms.map(p=>{
+            const intel=PERM_INTEL[p]||{};
+            return `<div style="display:flex;gap:10px;align-items:flex-start;padding:7px 10px;border-radius:7px;background:var(--red-dim);border:1px solid #ef444430">
+              <div style="flex:1">
+                <div style="font-size:11px;font-weight:700;color:var(--red)">⚠ ${p}</div>
+                ${intel.threat?`<div style="font-size:10px;color:var(--text2);margin-top:2px">${intel.threat}</div>`:''}
+              </div>
+              <div style="font-size:9px;padding:2px 7px;border-radius:4px;background:var(--red);color:#fff;white-space:nowrap;flex-shrink:0;align-self:flex-start;margin-top:2px">${intel.cat||'DANGER'}</div>
+            </div>`;
+          }).join('')}
+        </div>`:``}
+        ${r.warnPerms.length>0?`
+        <div class="finding-group-title" style="margin-bottom:8px">🟡 Warning Permissions (${r.warnPerms.length})</div>
+        <div class="perms-grid" style="margin-bottom:14px">
+          ${r.warnPerms.map(p=>{
+            const intel=PERM_INTEL[p]||{};
+            return `<div class="perm-pill warning" title="${intel.threat||p}">• ${p}${intel.cat?` <span style="opacity:.6;font-size:9px">[${intel.cat}]</span>`:''}</div>`;
+          }).join('')}
+        </div>`:``}
+        ${r.safePerms.length>0?`
+        <div class="finding-group-title" style="margin-bottom:8px">⬜ Other Permissions (${r.safePerms.length})</div>
+        <div class="perms-grid">${r.safePerms.map(p=>`<div class="perm-pill" title="${p}">${p}</div>`).join('')}</div>`:``}
+      </div>
+    </div>
+  `;
+  resultsList.appendChild(card);
+  document.getElementById('resultsSection').style.display='';
+}
+
+function toggleResult(header, id) {
+  const body=document.getElementById(id); if(!body) return;
+  const chev=header.querySelector('.chevron');
+  const open=body.classList.toggle('open'); chev.classList.toggle('open',open);
+  if (open && !activeTab[id]) activeTab[id]='overview';
+}
+
+function switchTab(id, tab, el) {
+  const body=document.getElementById(id); if(!body) return;
+  body.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  body.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  const tc=document.getElementById(id+'-'+tab); if(tc) tc.classList.add('active');
+  el.classList.add('active');
+  activeTab[id]=tab;
+}
+
+/* =====================================================================
+   EXPORTS
+===================================================================== */
+btnExportJSON.addEventListener('click', () => {
+  const clean=results.map(r=>({...r, fileList:undefined}));
+  dl(new Blob([JSON.stringify(clean,null,2)],{type:'application/json'}),'mast_report_'+Date.now()+'.json');
+});
+
+btnExportCSV.addEventListener('click', () => {
+  const h=['file','verdict','sha256','signature','yara_hits','masvs_fails','masvs_warns','dex_high','dex_medium','dex_low','sqlite_dbs','sqlite_pii_found','dangerous_perms','package','size_bytes','scanned_at'];
+  const rows=results.map(r=>[
+    r.name, r.verdict, r.sha256, r.signature?.status||'',
+    (r.yaraHits||[]).map(y=>y.name).join(';'),
+    (r.masvs||[]).filter(m=>m.status==='fail').length,
+    (r.masvs||[]).filter(m=>m.status==='warn').length,
+    r.dexFindings.filter(f=>f.sev==='high').length,
+    r.dexFindings.filter(f=>f.sev==='medium').length,
+    r.dexFindings.filter(f=>f.sev==='low').length,
+    (r.sqlite||[]).length,
+    (r.sqlite||[]).some(db=>db.piiColumns.length>0)?'YES':'NO',
+    '"'+(r.dangerPerms||[]).join(';')+'"',
+    r.manifest.pkg, r.size, r.scannedAt
+  ]);
+  dl(new Blob([[h.join(','),...rows.map(r=>r.join(','))].join('\n')],{type:'text/csv'}),'mast_summary_'+Date.now()+'.csv');
+});
+
+function dl(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href)}
+
+btnClear.addEventListener('click',()=>{
+  queue.length=0;results.length=0;queueList.innerHTML='';resultsList.innerHTML='';fileInput.value='';
+  ['queueSection','resultsSection','progressContainer','statsRow'].forEach(id=>document.getElementById(id).style.display='none');
+  btnScan.disabled=true;btnExportJSON.disabled=true;btnExportCSV.disabled=true;
+});
+
+document.getElementById('engineInfo').textContent='Darlene-X · JSZip 3.10 · AXML · DEX · YARA(12) · MASVS(12) · SQLite · 9 Perm Combos · 70+ Perm Intel';
+</script>
+</body>
+</html>
