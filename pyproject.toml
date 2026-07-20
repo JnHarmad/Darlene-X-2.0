@@ -3,65 +3,38 @@ requires = ["setuptools>=65.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "darlene-x"
+name = "darlene-x-2"
 version = "2.0.0"
-description = "Static Android APK malware analysis framework with semantic analysis layer"
+description = "Darlene-X_2.0 — offline static Android APK malware analysis (CLI + browser)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
-authors = [
-    {name = "Security Research Team"}
-]
+authors = [{name = "Security Research Team"}]
 
 dependencies = [
-    # Core CLI & Framework
     "click>=8.1.0",
     "rich>=13.0.0",
     "loguru>=0.7.0",
-    
-    # APK Analysis
     "androguard>=4.0.0",
-    
-    # Graph & Network Analysis
     "networkx>=3.2.0",
-    
-    # Report Generation
     "jinja2>=3.1.0",
-    "reportlab>=4.0.0",
-    
-    # Data Processing
-    "numpy>=1.24.0",
-    "pandas>=2.0.0",
-    
-    # Utilities
     "python-dateutil>=2.8.0",
-    "pytz>=2024.1",
-    "six>=1.16.0",
-    
-    # LLM Integration
-    "anthropic>=0.25.0",
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7.0",
-    "pytest-cov>=4.0",
-    "black>=23.0",
-    "ruff>=0.1",
-    "mypy>=1.0",
-]
-
-advanced = [
-    # Pattern matching with YARA (requires yara-core system library)
-    "yara-python>=4.2.0",
-]
+dev = ["pytest>=7.0", "ruff>=0.1"]
+yara = ["yara-python>=4.2.0"]
+intel = ["httpx>=0.27.0"]
 
 [project.scripts]
-darlene-x = "darlene_x.cli:cli"
+darlene-x-2 = "darlene_x.cli:cli"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["darlene_x*"]
+
+[tool.setuptools.package-data]
+darlene_x = ["rules/yara/*.yar", "templates/*.html"]
 
 [tool.black]
 line-length = 100
@@ -70,45 +43,4 @@ target-version = ["py310"]
 [tool.ruff]
 select = ["E", "F", "W"]
 line-length = 100
-
-[tool.mypy]
-python_version = "3.10"
-warn_return_any = true
-warn_unused_configs = true
-    # Install these manually if needed:
-    # - apktool: static APK decompilation
-    # - jadx: Java source reconstruction
-    # - semgrep: code pattern matching
-    # - trufflehog: secret scanning
-    # - detect-secrets: credential detection
-    # - yara: pattern matching
-    # - radare2: binary analysis
-    # - ghidra: reverse engineering
-]
-
-[project.scripts]
-darlene-x = "darlene_x.cli:main"
-
-[tool.setuptools]
-packages = ["darlene_x"]
-
-[tool.setuptools.package-data]
-darlene_x = [
-    "modules/templates/*.html",
-    "scripts/yara_rules/*.yar",
-]
-
-[tool.black]
-line-length = 100
-target-version = ["py310", "py311"]
-
-[tool.ruff]
-line-length = 100
 target-version = "py310"
-select = ["E", "F", "W"]
-
-[tool.mypy]
-python_version = "3.10"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = false

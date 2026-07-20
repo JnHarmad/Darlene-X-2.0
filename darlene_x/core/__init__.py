@@ -1,5 +1,5 @@
 """
-Darlene-X Core Infrastructure
+Darlene-X_2.0 Core Infrastructure
 
 Provides the foundation for all analysis phases:
 - Finding: Unified data structure for analysis results

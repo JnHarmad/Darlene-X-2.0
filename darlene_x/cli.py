@@ -1,14 +1,8 @@
 """
-Darlene-X Flask REST API - Backend server for APK analysis
+Darlene-X_2.0 CLI — offline static APK malware analysis.
 
-Provides REST endpoints for:
-- APK upload and analysis
-- Result querying
-- Configuration management
-
-To run:
-    python -m darlene_x.api
-    # Server starts on http://localhost:5000
+Usage:
+    darlene-x-2 analyze app.apk -o ./out
 """
 
 import logging
@@ -30,19 +24,14 @@ console = Console()
 
 
 @click.group()
-@click.version_option(version="2.0.0", prog_name="darlene-x")
+@click.version_option(version="2.0.0", prog_name="darlene-x-2")
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose logging")
 def cli(verbose):
     """
-    Darlene-X: Advanced APK Malware Analysis Framework
-    
-    Performs comprehensive static analysis of Android APK files using:
-    - Manifest auditing
-    - Permission analysis  
-    - API call detection
-    - Signature verification
-    - Secret scanning
-    - LLM-powered classification (Phase 7)
+    Darlene-X_2.0: Offline static APK malware analysis.
+
+    Manifest, permissions, APIs, YARA (on decompiled tree), secrets,
+    optional VirusTotal hash lookup and AI assist when keys are set.
     """
     if verbose:
         logger.enable("darlene_x")
@@ -249,12 +238,12 @@ def query(db: str, phase: Optional[str], severity: Optional[str]):
 
 
 def _show_banner():
-    """Display Darlene-X banner."""
+    """Display Darlene-X_2.0 banner."""
     banner = """
-    ╔═══════════════════════════════════════╗
-    ║     DARLENE-X v2.0 - APK Analyzer     ║
-    ║   Refactored Architecture Framework   ║
-    ╚═══════════════════════════════════════╝
+    ╔══════════════════════════════════════════╗
+    ║      Darlene-X_2.0  ·  APK Analyzer      ║
+    ║   Offline static malware detection CLI   ║
+    ╚══════════════════════════════════════════╝
     """
     console.print(Panel(banner.strip(), style="cyan"))
 
@@ -323,7 +312,7 @@ def _export_html(findings, out_dir):
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Darlene-X Analysis Report</title>
+        <title>Darlene-X_2.0 Analysis Report</title>
         <style>
             body { font-family: Arial; margin: 20px; }
             .critical { color: red; font-weight: bold; }
@@ -334,7 +323,7 @@ def _export_html(findings, out_dir):
         </style>
     </head>
     <body>
-        <h1>Darlene-X APK Analysis Report</h1>
+        <h1>Darlene-X_2.0 APK Analysis Report</h1>
     """
     
     by_phase = {}

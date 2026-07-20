@@ -1,50 +1,14 @@
-# Darlene-X Framework Dependencies
-# Python >= 3.10 required
-# Last updated: 2026-05-17
+# Darlene-X_2.0 — local Python CLI dependencies
+# Primary browser engine lives under web/
 
-# Core CLI & Framework
 click>=8.1.0
 rich>=13.0.0
 loguru>=0.7.0
-
-# APK Analysis
 androguard>=4.0.0
-
-# Graph & Network Analysis
 networkx>=3.2.0
-
-# Report Generation
 jinja2>=3.1.0
-reportlab>=4.0.0
-
-# Data Processing
-numpy>=1.24.0
-pandas>=2.0.0
-
-# Utilities
 python-dateutil>=2.8.0
-pytz>=2024.1
-six>=1.16.0
 
-# LLM Integration (optional - only needed for Phase 7)
-anthropic>=0.25.0
-
-# Advanced Pattern Matching (optional - install manually if needed)
-# yara-python>=4.2.0    # Requires yara-core library
-
-# Development & Testing (optional - uncomment if developing)
-# pytest>=7.0
-# pytest-cov>=4.0
-# black>=23.0
-# ruff>=0.1
-# mypy>=1.0
-
-# External tools NOT available via pip (install manually):
-# - apktool               # apt-get install apktool (Linux), brew install apktool (macOS)
-# - jadx                  # Download from https://github.com/skylot/jadx/releases
-# - radare2               # apt-get install radare2 (Linux), brew install radare2 (macOS)
-# - ghidra                # Download from https://ghidra-sre.org/
-# - yara-core             # For yara-python support
-networkx
-jinja2
-semgrep
+# Optional
+# yara-python>=4.2.0
+# httpx>=0.27.0

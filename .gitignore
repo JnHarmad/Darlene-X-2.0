@@ -1,5 +1,13 @@
-ncfl/
-darlene_output/
-Darlene_X/apk/
-*pycache*
+# Darlene-X .gitignore
 .venv/
+**/__pycache__/
+*.pyc
+darlene_output/
+ncfl/
+Darlene_X/apk/
+*.egg-info/
+web/wasm/node_modules/
+web/wasm/package-lock.json
+web/wasm/package.json
+.DS_Store
+Thumbs.db

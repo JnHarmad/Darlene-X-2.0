@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Darlene-X: APK Security Analysis</title>
+    <title>Darlene-X_2.0: APK Security Analysis</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <div class="container">
         <header class="header">
-            <h1>🔍 Darlene-X</h1>
-            <p>Browser-Based APK Security Analysis</p>
+            <h1>Darlene-X_2.0</h1>
+            <p>Browser-Based APK Security Analysis (deprecated prototype — use web/)</p>
         </header>
 
         <main class="main-content">
@@ -28,22 +28,10 @@
                 </div>
             </section>
 
-            <!-- Configuration Section -->
+            <!-- Deprecated cloud config removed — use ../web for offline analysis -->
             <section class="config-section">
-                <h3>Configuration</h3>
-                <div class="config-group">
-                    <label for="apiProvider">AI Provider:</label>
-                    <select id="apiProvider">
-                        <option value="openai">OpenAI (GPT-4)</option>
-                        <option value="anthropic">Anthropic (Claude)</option>
-                        <option value="google">Google (Gemini)</option>
-                    </select>
-                </div>
-                <div class="config-group">
-                    <label for="apiKey">API Key:</label>
-                    <input type="password" id="apiKey" placeholder="Enter your API key (stored locally only)">
-                </div>
-                <button id="saveConfig" class="btn btn-secondary">Save Configuration</button>
+                <h3>Privacy notice</h3>
+                <p>This prototype is deprecated. Use the <code>web/</code> app for fully local, serverless analysis (no LLM, no uploads).</p>
             </section>
 
             <!-- Analysis Section -->
@@ -55,7 +43,7 @@
                     <button id="btnAPI" class="btn btn-analysis" disabled>🔌 Suspicious APIs</button>
                     <button id="btnSignature" class="btn btn-analysis" disabled>🔑 Signature Analysis</button>
                     <button id="btnEncryption" class="btn btn-analysis" disabled>🔒 Encryption Detection</button>
-                    <button id="btnMalware" class="btn btn-analysis" disabled>⚠️ Malware Detection</button>
+                    <button id="btnMalware" class="btn btn-analysis" disabled title="Disabled — cloud LLM removed">⚠️ Malware Detection (disabled)</button>
                 </div>
             </section>
 

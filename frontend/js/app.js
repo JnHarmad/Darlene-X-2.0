@@ -38,17 +38,13 @@ class DarleneXApp {
             }
         });
 
-        // Configuration
-        document.getElementById('saveConfig').addEventListener('click', () => {
-            const provider = document.getElementById('apiProvider').value;
-            const apiKey = document.getElementById('apiKey').value;
-            if (apiKey.trim()) {
-                llmIntegration.updateConfig(provider, apiKey);
-                this.showNotification('Configuration saved', 'success');
-            } else {
-                this.showNotification('Please enter an API key', 'error');
-            }
-        });
+        // Configuration UI removed (privacy). Keep handler no-op if elements absent.
+        const saveConfig = document.getElementById('saveConfig');
+        if (saveConfig) {
+            saveConfig.addEventListener('click', () => {
+                this.showNotification('Cloud LLM disabled — use web/ for offline analysis', 'error');
+            });
+        }
 
         // Analysis buttons
         document.getElementById('btnManifest').addEventListener('click', () => this.analyzeManifest());

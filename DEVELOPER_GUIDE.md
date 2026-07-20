@@ -1,4 +1,4 @@
-# Developer Quick Reference - New Architecture
+# Darlene-X_2.0 Developer Quick Reference
 
 ## 🏗️ How to Add a New Analyser
 
@@ -210,7 +210,7 @@ findings = orch.run_phases(analysers)
 
 ### Normal (Default)
 ```bash
-darlene-x analyze app.apk --out ./results
+darlene-x-2 analyze app.apk --out ./results
 ```
 - Phases 1-6 run in parallel
 - Phase 7 (novel) runs after
@@ -219,7 +219,7 @@ darlene-x analyze app.apk --out ./results
 
 ### Fast Mode (Skip LLM)
 ```bash
-darlene-x analyze app.apk --out ./results --no-llm
+darlene-x-2 analyze app.apk --out ./results --no-llm
 ```
 - Same as normal but skips LLM phase
 - 50% faster
@@ -228,7 +228,7 @@ darlene-x analyze app.apk --out ./results --no-llm
 
 ### Debug Mode (Serial Execution)
 ```bash
-darlene-x analyze app.apk --out ./results --serial
+darlene-x-2 analyze app.apk --out ./results --serial
 ```
 - All phases run one-by-one
 - Easier to debug individual phases
@@ -291,7 +291,7 @@ darlene_x/
 **Fix**: 
 ```bash
 # Check which tools available
-darlene-x status  # (if you implement this command)
+darlene-x-2 status  # (if you implement this command)
 
 # Install missing tool
 # Windows: choco install apktool

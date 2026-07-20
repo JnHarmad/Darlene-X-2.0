@@ -3,8 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>APK MAST Engine</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; form-action 'none'; base-uri 'none'">
+<title>Darlene-X_2.0 · Offline APK Static Analysis</title>
+<!-- Fully local: no CDN, no network. Sample + report never leave this machine. -->
+<script src="vendor/jszip.min.js"></script>
+<script src="js/engine/detection-rules.js"></script>
+<script src="js/engine/wasm-bridge.js"></script>
 <style>
 :root {
   --bg:#0d0d0f;--bg2:#15151a;--bg3:#1c1c23;--bg4:#222230;
@@ -145,7 +149,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:13
 .sqlite-pii{display:inline-block;font-size:10px;padding:2px 8px;border-radius:4px;margin:2px;border:1px solid var(--amber);color:var(--amber);background:var(--amber-dim)}
 
 .perms-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:5px;margin-top:7px}
-.perm-pill{font-size:10px;padding:4px 9px;border-radius:6px;border:1px solid var(--border);color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.perm-pill{font-size:10px;padding:5px 9px;border-radius:6px;border:1px solid var(--border);color:var(--text2)}
 .perm-pill.danger{border-color:#ef444440;color:var(--red);background:var(--red-dim)}
 .perm-pill.warning{border-color:#f59e0b40;color:var(--amber);background:var(--amber-dim)}
 
@@ -163,12 +167,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:13
   <div class="header">
     <div class="logo">🛡</div>
     <div>
-      <h1>APK MAST Engine</h1>
-      <p>Mobile Application Security Testing &mdash; fully client-side, zero network exposure</p>
+      <h1>Darlene-X_2.0</h1>
+      <p>Android malware static analysis &mdash; fully client-side, zero network exposure</p>
     </div>
     <div class="badges">
-      <span class="badge offline">OFFLINE</span>
-      <span class="badge engine">YARA + MASVS</span>
+      <span class="badge offline">100% LOCAL</span>
+      <span class="badge engine">WASM + STATIC</span>
+      <span class="badge offline" title="connect-src 'none' — sample never leaves this browser">NO NETWORK</span>
     </div>
   </div>
 
@@ -176,7 +181,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:13
     <input type="file" id="fileInput" multiple accept=".apk"/>
     <div style="font-size:32px;margin-bottom:.6rem">📦</div>
     <h2>Drop APK files or click to select</h2>
-    <p>Batch analysis &bull; YARA signatures &bull; OWASP MASVS compliance &bull; SQLite inspection &bull; Zero network calls</p>
+    <p>Serverless static analysis &bull; Sample + report stay on this machine &bull; WASM packing heuristics &bull; Zero uploads</p>
   </div>
 
   <div class="controls">
@@ -215,29 +220,204 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:13
 
 <script>
 /* =====================================================================
-   DATA: DANGEROUS PERMISSIONS
+   DATA: PERMISSION INTELLIGENCE DATABASE
+   Each entry: name, risk level, category, threat description
 ===================================================================== */
-const DANGEROUS_PERMS = new Set([
-  'READ_CONTACTS','WRITE_CONTACTS','GET_ACCOUNTS','READ_CALL_LOG','WRITE_CALL_LOG',
-  'PROCESS_OUTGOING_CALLS','READ_SMS','RECEIVE_SMS','SEND_SMS','RECEIVE_MMS',
-  'RECEIVE_WAP_PUSH','READ_EXTERNAL_STORAGE','WRITE_EXTERNAL_STORAGE','CAMERA',
-  'RECORD_AUDIO','ACCESS_FINE_LOCATION','ACCESS_COARSE_LOCATION','ACCESS_BACKGROUND_LOCATION',
-  'READ_PHONE_STATE','READ_PHONE_NUMBERS','CALL_PHONE','USE_SIP','ANSWER_PHONE_CALLS',
-  'BODY_SENSORS','ACTIVITY_RECOGNITION','BLUETOOTH_SCAN','BLUETOOTH_CONNECT',
-  'MANAGE_EXTERNAL_STORAGE','REQUEST_INSTALL_PACKAGES','SYSTEM_ALERT_WINDOW',
-  'BIND_ACCESSIBILITY_SERVICE','BIND_DEVICE_ADMIN','DISABLE_KEYGUARD',
-  'HIDE_OVERLAY_WINDOWS','PACKAGE_USAGE_STATS','QUERY_ALL_PACKAGES',
-  'WRITE_SETTINGS','WRITE_SECURE_SETTINGS','MOUNT_UNMOUNT_FILESYSTEMS',
-  'READ_LOGS','DELETE_PACKAGES','INSTALL_PACKAGES','DUMP',
-  'CLEAR_APP_CACHE','DIAGNOSTIC','WRITE_GSERVICES','UPDATE_DEVICE_STATS',
-  'CHANGE_COMPONENT_ENABLED_STATE','SET_PREFERRED_APPLICATIONS'
-]);
-const WARNING_PERMS = new Set([
-  'INTERNET','RECEIVE_BOOT_COMPLETED','WAKE_LOCK','VIBRATE','ACCESS_WIFI_STATE',
-  'ACCESS_NETWORK_STATE','CHANGE_NETWORK_STATE','BLUETOOTH','BLUETOOTH_ADMIN',
-  'FOREGROUND_SERVICE','USE_BIOMETRIC','USE_FINGERPRINT','FLASHLIGHT','NFC',
-  'SCHEDULE_EXACT_ALARM','READ_MEDIA_IMAGES','READ_MEDIA_VIDEO','READ_MEDIA_AUDIO'
-]);
+const PERM_INTEL = {
+  // ── TELEPHONY / SMS ──────────────────────────────────────────────
+  'READ_SMS':           { risk:'critical', cat:'Telephony', threat:'Read all SMS messages — OTP theft, credential interception' },
+  'RECEIVE_SMS':        { risk:'critical', cat:'Telephony', threat:'Intercept incoming SMS in real-time — enables OTP/2FA bypass' },
+  'SEND_SMS':           { risk:'critical', cat:'Telephony', threat:'Send SMS silently — premium SMS fraud, C2 communication' },
+  'RECEIVE_MMS':        { risk:'high',     cat:'Telephony', threat:'Receive MMS messages — media-borne payload delivery' },
+  'RECEIVE_WAP_PUSH':   { risk:'high',     cat:'Telephony', threat:'Intercept WAP-push messages — used in subscription fraud' },
+  'READ_CALL_LOG':      { risk:'high',     cat:'Telephony', threat:'Access full call history — profiling and surveillance' },
+  'WRITE_CALL_LOG':     { risk:'high',     cat:'Telephony', threat:'Modify call records — evidence tampering, stalkerware' },
+  'PROCESS_OUTGOING_CALLS': { risk:'high', cat:'Telephony', threat:'Intercept and redirect outgoing calls' },
+  'CALL_PHONE':         { risk:'high',     cat:'Telephony', threat:'Make phone calls without user confirmation — toll fraud' },
+  'USE_SIP':            { risk:'medium',   cat:'Telephony', threat:'VoIP SIP calls — potential communication interception' },
+  'ANSWER_PHONE_CALLS': { risk:'high',     cat:'Telephony', threat:'Silently answer incoming calls — covert eavesdropping' },
+  'READ_PHONE_STATE':   { risk:'high',     cat:'Telephony', threat:'Access IMEI, IMSI, SIM state, call state — device fingerprinting' },
+  'READ_PHONE_NUMBERS': { risk:'high',     cat:'Telephony', threat:'Read device phone numbers — identity harvesting' },
+
+  // ── CONTACTS / ACCOUNTS ──────────────────────────────────────────
+  'READ_CONTACTS':      { risk:'high',     cat:'Contacts',  threat:'Exfiltrate full contact database — social graph mapping' },
+  'WRITE_CONTACTS':     { risk:'medium',   cat:'Contacts',  threat:'Modify contacts — phishing via trusted contact injection' },
+  'GET_ACCOUNTS':       { risk:'high',     cat:'Contacts',  threat:'List all accounts (Google, banking, social) on device' },
+
+  // ── LOCATION ─────────────────────────────────────────────────────
+  'ACCESS_FINE_LOCATION':       { risk:'critical', cat:'Location', threat:'GPS-precision tracking — real-time surveillance' },
+  'ACCESS_COARSE_LOCATION':     { risk:'high',     cat:'Location', threat:'Cell/WiFi-based location tracking' },
+  'ACCESS_BACKGROUND_LOCATION': { risk:'critical', cat:'Location', threat:'Track location when app is closed — persistent stalking' },
+  'CONTROL_LOCATION_UPDATES':   { risk:'high',     cat:'Location', threat:'Control location update delivery — intercept location data' },
+  'ACCESS_LOCATION_EXTRA_COMMANDS': { risk:'medium', cat:'Location', threat:'Send extra commands to GPS provider' },
+
+  // ── CAMERA / MICROPHONE ──────────────────────────────────────────
+  'CAMERA':             { risk:'critical', cat:'Sensor',    threat:'Covert photo/video capture — visual surveillance' },
+  'RECORD_AUDIO':       { risk:'critical', cat:'Sensor',    threat:'Covert audio recording — eavesdropping, keylogging via mic' },
+  'BODY_SENSORS':       { risk:'medium',   cat:'Sensor',    threat:'Access wearable sensor data (heart rate, etc.)' },
+  'ACTIVITY_RECOGNITION': { risk:'medium', cat:'Sensor',    threat:'Detect physical activity — behavioral profiling' },
+
+  // ── STORAGE ──────────────────────────────────────────────────────
+  'READ_EXTERNAL_STORAGE':  { risk:'high',   cat:'Storage', threat:'Read all files on SD card including photos, documents' },
+  'WRITE_EXTERNAL_STORAGE': { risk:'high',   cat:'Storage', threat:'Write/delete any file on external storage' },
+  'MANAGE_EXTERNAL_STORAGE':{ risk:'critical',cat:'Storage', threat:'Unrestricted access to ALL device storage — full file system' },
+  'MOUNT_UNMOUNT_FILESYSTEMS': { risk:'high', cat:'Storage', threat:'Mount/unmount file systems — low-level storage manipulation' },
+
+  // ── PACKAGE / APP MANAGEMENT ─────────────────────────────────────
+  'REQUEST_INSTALL_PACKAGES': { risk:'critical', cat:'Packages', threat:'Install arbitrary APKs — dropper, secondary payload delivery' },
+  'INSTALL_PACKAGES':         { risk:'critical', cat:'Packages', threat:'Silently install packages — malware dropper (system-level)' },
+  'DELETE_PACKAGES':          { risk:'high',     cat:'Packages', threat:'Uninstall other apps — delete security/AV software' },
+  'CHANGE_COMPONENT_ENABLED_STATE': { risk:'high', cat:'Packages', threat:'Enable/disable app components — AV evasion, persistence' },
+  'SET_PREFERRED_APPLICATIONS': { risk:'medium', cat:'Packages', threat:'Override default app associations' },
+  'QUERY_ALL_PACKAGES':       { risk:'medium',   cat:'Packages', threat:'Enumerate all installed apps — recon, AV detection' },
+  'PACKAGE_USAGE_STATS':      { risk:'high',     cat:'Packages', threat:'Access detailed app usage stats — behavioral fingerprinting' },
+  'CLEAR_APP_CACHE':          { risk:'medium',   cat:'Packages', threat:'Clear cache of other apps — data destruction / evidence removal' },
+
+  // ── DEVICE ADMIN / SYSTEM ────────────────────────────────────────
+  'BIND_DEVICE_ADMIN':         { risk:'critical', cat:'Admin',  threat:'Device Administrator binding — ransomware lock, MDM abuse' },
+  'BIND_ACCESSIBILITY_SERVICE':{ risk:'critical', cat:'Admin',  threat:'Accessibility service — keylogging, UI automation, overlay attacks' },
+  'SYSTEM_ALERT_WINDOW':       { risk:'critical', cat:'Admin',  threat:'Draw over other apps — phishing overlays, UI spoofing' },
+  'DISABLE_KEYGUARD':          { risk:'high',     cat:'Admin',  threat:'Disable screen lock — bypass authentication' },
+  'HIDE_OVERLAY_WINDOWS':      { risk:'medium',   cat:'Admin',  threat:'Hide overlay windows from other apps' },
+  'WRITE_SETTINGS':            { risk:'high',     cat:'Admin',  threat:'Modify global system settings — persistence, config tampering' },
+  'WRITE_SECURE_SETTINGS':     { risk:'critical', cat:'Admin',  threat:'Modify secure system settings — requires MiTM or system app' },
+  'WRITE_GSERVICES':           { risk:'high',     cat:'Admin',  threat:'Modify Google services config — requires system privileges' },
+  'UPDATE_DEVICE_STATS':       { risk:'medium',   cat:'Admin',  threat:'Update device statistics — requires system privileges' },
+  'SIGNAL_PERSISTENT_PROCESSES':{ risk:'high',   cat:'Admin',  threat:'Keep processes alive — persistence, battery abuse' },
+  'SET_TIME':                  { risk:'medium',   cat:'Admin',  threat:'Change system time — log tampering, certificate bypass' },
+  'SET_TIME_ZONE':             { risk:'low',      cat:'Admin',  threat:'Change time zone' },
+  'FACTORY_TEST':              { risk:'high',     cat:'Admin',  threat:'Factory test mode access — deep system access' },
+  'DIAGNOSTIC':                { risk:'high',     cat:'Admin',  threat:'Access diagnostic interfaces — system-level data exposure' },
+  'DUMP':                      { risk:'critical', cat:'Admin',  threat:'Dump app state/memory — credential extraction from other apps' },
+  'STATUS_BAR':                { risk:'medium',   cat:'Admin',  threat:'Expand/collapse status bar' },
+  'READ_LOGS':                 { risk:'critical', cat:'Admin',  threat:'Read system logs — extract credentials, tokens, sensitive data from log output' },
+  'ACCESS_CHECKIN_PROPERTIES': { risk:'medium',   cat:'Admin',  threat:'Access device checkin properties' },
+  'CHANGE_CONFIGURATION':      { risk:'medium',   cat:'Admin',  threat:'Change device configuration — locale, orientation attacks' },
+
+  // ── NETWORK ──────────────────────────────────────────────────────
+  'INTERNET':                  { risk:'warning',  cat:'Network', threat:'Internet access — required for any network-based attack' },
+  'CHANGE_NETWORK_STATE':      { risk:'warning',  cat:'Network', threat:'Toggle network connectivity — DoS, forced WiFi switching' },
+  'CHANGE_WIFI_STATE':         { risk:'warning',  cat:'Network', threat:'Connect/disconnect WiFi networks — forced network change' },
+  'ACCESS_WIFI_STATE':         { risk:'warning',  cat:'Network', threat:'Read WiFi network info — location inference via SSIDs' },
+  'ACCESS_NETWORK_STATE':      { risk:'warning',  cat:'Network', threat:'Check network connectivity state' },
+  'NFC':                       { risk:'medium',   cat:'Network', threat:'NFC access — contactless payment relay, badge cloning' },
+
+  // ── BLUETOOTH ────────────────────────────────────────────────────
+  'BLUETOOTH_SCAN':            { risk:'medium',   cat:'Bluetooth', threat:'Scan for Bluetooth devices — proximity tracking' },
+  'BLUETOOTH_CONNECT':         { risk:'medium',   cat:'Bluetooth', threat:'Connect to Bluetooth devices — data exfil via BT' },
+  'BLUETOOTH':                 { risk:'warning',  cat:'Bluetooth', threat:'Bluetooth communication' },
+  'BLUETOOTH_ADMIN':           { risk:'warning',  cat:'Bluetooth', threat:'Bluetooth admin operations' },
+
+  // ── PERSISTENCE ──────────────────────────────────────────────────
+  'RECEIVE_BOOT_COMPLETED':    { risk:'warning',  cat:'Persistence', threat:'Auto-start on boot — persistent malware survival across reboots' },
+  'FOREGROUND_SERVICE':        { risk:'warning',  cat:'Persistence', threat:'Run persistent foreground service — survives app closure' },
+  'SCHEDULE_EXACT_ALARM':      { risk:'warning',  cat:'Persistence', threat:'Schedule exact alarms — periodic C2 check-in' },
+  'USE_EXACT_ALARM':           { risk:'warning',  cat:'Persistence', threat:'Exact alarm scheduling' },
+  'WAKE_LOCK':                 { risk:'warning',  cat:'Persistence', threat:'Prevent CPU sleep — battery drain, covert background activity' },
+  'KILL_BACKGROUND_PROCESSES': { risk:'medium',   cat:'Persistence', threat:'Kill other background processes — terminate AV/security apps' },
+
+  // ── MEDIA / UI ───────────────────────────────────────────────────
+  'READ_MEDIA_IMAGES':         { risk:'warning',  cat:'Media', threat:'Access photo library' },
+  'READ_MEDIA_VIDEO':          { risk:'warning',  cat:'Media', threat:'Access video library' },
+  'READ_MEDIA_AUDIO':          { risk:'warning',  cat:'Media', threat:'Access audio files' },
+  'EXPAND_STATUS_BAR':         { risk:'low',      cat:'UI',    threat:'Expand/collapse status bar' },
+  'SET_WALLPAPER':             { risk:'low',      cat:'UI',    threat:'Change device wallpaper' },
+  'REORDER_TASKS':             { risk:'low',      cat:'UI',    threat:'Reorder app task stack' },
+  'GET_TASKS':                 { risk:'medium',   cat:'UI',    threat:'List running tasks — recon, overlay targeting' },
+  'BROADCAST_STICKY':          { risk:'low',      cat:'UI',    threat:'Send persistent broadcasts' },
+  'BIND_NOTIFICATION_LISTENER_SERVICE': { risk:'high', cat:'UI', threat:'Read all device notifications — OTP/credential interception from notifications' },
+  'USE_BIOMETRIC':             { risk:'warning',  cat:'Auth',  threat:'Biometric authentication' },
+  'USE_FINGERPRINT':           { risk:'warning',  cat:'Auth',  threat:'Fingerprint authentication' },
+  'VIBRATE':                   { risk:'low',      cat:'Other', threat:'Control vibration motor' },
+  'FLASHLIGHT':                { risk:'warning',  cat:'Other', threat:'Control camera flashlight' },
+  'MODIFY_AUDIO_SETTINGS':     { risk:'low',      cat:'Other', threat:'Modify audio volume/routing' },
+  'PERSISTENT_ACTIVITY':       { risk:'medium',   cat:'Other', threat:'Mark activity as persistent — hard to kill' },
+  'RESTART_PACKAGES':          { risk:'medium',   cat:'Other', threat:'Force-stop other apps' },
+};
+
+// Build derived sets for quick lookup
+const DANGEROUS_PERMS = new Set(Object.entries(PERM_INTEL)
+  .filter(([,v]) => ['critical','high'].includes(v.risk))
+  .map(([k]) => k));
+const WARNING_PERMS = new Set(Object.entries(PERM_INTEL)
+  .filter(([,v]) => ['warning','medium'].includes(v.risk))
+  .map(([k]) => k));
+
+// High-risk permission combinations (combo = extra alert)
+const PERM_COMBOS = [
+  {
+    id:'sms_intercept_combo',
+    perms:['RECEIVE_SMS','READ_SMS','SEND_SMS'],
+    required:2,
+    sev:'critical',
+    label:'Full SMS Control Combo',
+    threat:'Receive + Read + Send SMS — complete OTP interception and premium fraud capability. Core banking trojan signature.'
+  },
+  {
+    id:'location_surveillance_combo',
+    perms:['ACCESS_FINE_LOCATION','ACCESS_BACKGROUND_LOCATION','RECORD_AUDIO'],
+    required:2,
+    sev:'critical',
+    label:'Covert Surveillance Combo',
+    threat:'Fine location + background tracking + microphone — full real-world surveillance kit. Indicative of stalkerware.'
+  },
+  {
+    id:'device_takeover_combo',
+    perms:['BIND_DEVICE_ADMIN','BIND_ACCESSIBILITY_SERVICE','SYSTEM_ALERT_WINDOW'],
+    required:2,
+    sev:'critical',
+    label:'Device Takeover Combo',
+    threat:'Device Admin + Accessibility + Overlay — the classic ransomware and banking trojan privilege stack.'
+  },
+  {
+    id:'dropper_combo',
+    perms:['REQUEST_INSTALL_PACKAGES','INSTALL_PACKAGES','MANAGE_EXTERNAL_STORAGE'],
+    required:2,
+    sev:'critical',
+    label:'Dropper Capability Combo',
+    threat:'Install packages + full storage access — dropper pattern for second-stage payload delivery.'
+  },
+  {
+    id:'identity_harvest_combo',
+    perms:['READ_CONTACTS','GET_ACCOUNTS','READ_PHONE_STATE','READ_PHONE_NUMBERS'],
+    required:3,
+    sev:'high',
+    label:'Identity Harvesting Combo',
+    threat:'Full identity exfiltration kit: contacts + accounts + IMEI + phone number.'
+  },
+  {
+    id:'stealth_persistence_combo',
+    perms:['RECEIVE_BOOT_COMPLETED','FOREGROUND_SERVICE','WAKE_LOCK','KILL_BACKGROUND_PROCESSES'],
+    required:3,
+    sev:'high',
+    label:'Stealth Persistence Combo',
+    threat:'Boot persistence + foreground service + wake lock + kill competitors — maximally persistent malware footprint.'
+  },
+  {
+    id:'log_dump_combo',
+    perms:['READ_LOGS','DUMP','WRITE_SECURE_SETTINGS'],
+    required:2,
+    sev:'critical',
+    label:'System-Level Privilege Abuse Combo',
+    threat:'Log reading + memory dump + secure settings write — system-app level privilege. Extremely suspicious in sideloaded APKs.'
+  },
+  {
+    id:'call_intercept_combo',
+    perms:['PROCESS_OUTGOING_CALLS','READ_CALL_LOG','ANSWER_PHONE_CALLS','RECORD_AUDIO'],
+    required:2,
+    sev:'high',
+    label:'Call Interception Combo',
+    threat:'Intercept, redirect, and record phone calls.'
+  },
+  {
+    id:'notification_otp_combo',
+    perms:['BIND_NOTIFICATION_LISTENER_SERVICE','READ_SMS','RECEIVE_SMS'],
+    required:2,
+    sev:'critical',
+    label:'Dual-Channel OTP Theft Combo',
+    threat:'Notification listener + SMS access — captures OTPs via both SMS and push notification channels simultaneously.'
+  },
+];
 
 /* =====================================================================
    DATA: DEX API PATTERNS
@@ -278,6 +458,11 @@ const DEX_PATTERNS = [
   {p:/Notification.*setContentText|NotificationManager/i, sev:'low', msg:'Notification posting capability', cat:'Adware'},
   {p:/Binder|IBinder.*transact/i,            sev:'low',   msg:'Direct Binder IPC usage', cat:'IPC'},
 ];
+
+// Merge reference APIs from Understanding_logical_flow (detection-rules.js)
+if (typeof DarleneRules !== 'undefined' && Array.isArray(DarleneRules.EXTRA_DEX_PATTERNS)) {
+  DEX_PATTERNS.push(...DarleneRules.EXTRA_DEX_PATTERNS);
+}
 
 const SUSPICIOUS_INTENTS = [
   'BOOT_COMPLETED','RECEIVE_SMS','SMS_RECEIVED','SMS_DELIVER','PHONE_STATE',
@@ -678,21 +863,44 @@ function parseAXML(buffer) {
 }
 
 function extractManifestInfo(strings) {
-  const def = { permissions:[], activities:[], services:[], receivers:[], providers:[], pkg:'Unknown', minSdk:'N/A', targetSdk:'N/A', allowBackup:'unknown' };
+  const def = { permissions:[], activities:[], services:[], receivers:[], providers:[], pkg:'Unknown', minSdk:'N/A', targetSdk:'N/A', allowBackup:'unknown', exportedComponents:[] };
   if (!strings) return def;
   const permissions=[], activities=[], services=[], receivers=[], providers=[];
   let pkg='Unknown', allowBackup='unknown';
+  const sdkCandidates = [];
+
   strings.forEach(s => {
     if (!s) return;
-    if (s.startsWith('android.permission.')) { const p=s.replace('android.permission.',''); if(!permissions.includes(p)) permissions.push(p); }
-    if (s==='true'||s==='false') allowBackup=s;
-    if (s.endsWith('Activity')&&s.includes('.')) activities.push(s);
-    else if (s.endsWith('Service')&&s.includes('.')) services.push(s);
-    else if ((s.endsWith('Receiver')||s.endsWith('BroadcastReceiver'))&&s.includes('.')) receivers.push(s);
-    else if (s.endsWith('Provider')&&s.includes('.')) providers.push(s);
-    if (/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){2,}$/.test(s) && !s.includes('android') && pkg==='Unknown') pkg=s;
+    // Permissions — android.permission.* AND custom permissions
+    if (s.startsWith('android.permission.')) {
+      const p = s.replace('android.permission.','');
+      if (!permissions.includes(p)) permissions.push(p);
+    } else if (s.includes('.permission.') && s.split('.').length >= 3) {
+      // Custom/OEM permissions (e.g. com.google.android.permission.*)
+      if (!permissions.includes(s)) permissions.push(s);
+    }
+    // Backup flag
+    if (s === 'true' || s === 'false') allowBackup = s;
+    // Components
+    if (s.endsWith('Activity') && s.includes('.') && !permissions.includes(s)) activities.push(s);
+    else if (s.endsWith('Service') && s.includes('.')) services.push(s);
+    else if ((s.endsWith('Receiver') || s.endsWith('BroadcastReceiver')) && s.includes('.')) receivers.push(s);
+    else if (s.endsWith('Provider') && s.includes('.')) providers.push(s);
+    // Package name — lowercase dotted, 3+ segments, no android namespace
+    if (/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*){2,}$/.test(s) && !s.startsWith('android') && pkg === 'Unknown') pkg = s;
+    // SDK integers: 1–99
+    if (/^\d{1,2}$/.test(s)) {
+      const n = parseInt(s);
+      if (n >= 1 && n <= 99) sdkCandidates.push(n);
+    }
   });
-  return { permissions, activities, services, receivers, providers, pkg, minSdk:'N/A', targetSdk:'N/A', allowBackup };
+
+  // SDK inference: sort candidates, minSdk = smallest plausible, targetSdk = largest
+  const sdksSorted = [...new Set(sdkCandidates)].sort((a,b)=>a-b);
+  const minSdk  = sdksSorted.length > 0 ? String(sdksSorted[0])  : 'N/A';
+  const targetSdk = sdksSorted.length > 1 ? String(sdksSorted[sdksSorted.length-1]) : (sdksSorted.length===1 ? String(sdksSorted[0]) : 'N/A');
+
+  return { permissions, activities, services, receivers, providers, pkg, minSdk, targetSdk, allowBackup };
 }
 
 /* =====================================================================
@@ -739,14 +947,58 @@ function analyzeDex(dexBytes) {
 }
 
 /* =====================================================================
-   RISK SCORER
+   MANIFEST PERMISSION ANALYSIS ENGINE
+   Returns structured findings from permission list + combos
 ===================================================================== */
-function scoreRisk(dexFindings, yaraHits, permissions, masvsFails) {
+function analyzePermissions(permissions) {
+  const findings = [];
+  const permSet = new Set(permissions);
+
+  // Per-permission findings for every dangerous/critical perm
+  permissions.forEach(perm => {
+    const intel = PERM_INTEL[perm];
+    if (!intel) return;
+    if (intel.risk === 'critical') {
+      findings.push({ sev:'high', msg:`[MANIFEST] ${perm}: ${intel.threat}`, cat:`Permission·${intel.cat}` });
+    } else if (intel.risk === 'high') {
+      findings.push({ sev:'medium', msg:`[MANIFEST] ${perm}: ${intel.threat}`, cat:`Permission·${intel.cat}` });
+    }
+  });
+
+  // Combo detection
+  const comboHits = [];
+  PERM_COMBOS.forEach(combo => {
+    const matched = combo.perms.filter(p => permSet.has(p));
+    if (matched.length >= combo.required) {
+      comboHits.push({ ...combo, matched });
+      findings.push({
+        sev: combo.sev === 'critical' ? 'high' : 'medium',
+        msg: `[COMBO] ${combo.label}: ${combo.threat} (matched: ${matched.join(', ')})`,
+        cat: 'Permission·Combo'
+      });
+    }
+  });
+
+  // Permission count thresholds
+  const dangerCount = permissions.filter(p => DANGEROUS_PERMS.has(p)).length;
+  if (dangerCount >= 15) {
+    findings.push({ sev:'high', msg:`[MANIFEST] Extreme permission count: ${dangerCount} dangerous permissions — far beyond any legitimate app. Strong malware indicator.`, cat:'Permission·Volume' });
+  } else if (dangerCount >= 8) {
+    findings.push({ sev:'medium', msg:`[MANIFEST] High dangerous permission count: ${dangerCount} — exceeds typical app needs.`, cat:'Permission·Volume' });
+  }
+
+  return { findings, comboHits };
+}
+
+/* =====================================================================
+===================================================================== */
+function scoreRisk(dexFindings, yaraHits, permissions, masvsFails, comboHits) {
   let score = 0;
   dexFindings.forEach(f => { if(f.sev==='high') score+=25; else if(f.sev==='medium') score+=12; else score+=4; });
   score += yaraHits.length * 40;
   score += permissions.filter(p => DANGEROUS_PERMS.has(p)).length * 7;
   score += masvsFails.filter(m => m.status==='fail').length * 10;
+  if (comboHits) comboHits.forEach(c => { score += c.sev === 'critical' ? 45 : 25; });
   if (score >= 100) return 'malicious';
   if (score >= 40) return 'suspicious';
   return 'clean';
@@ -756,6 +1008,7 @@ function scoreRisk(dexFindings, yaraHits, permissions, masvsFails) {
    MAIN ANALYSIS ORCHESTRATOR
 ===================================================================== */
 async function analyzeAPK(file) {
+  // Ensure WASM hot-path is ready (no-op after first load; never touches network beyond local files)
   const buffer = await file.arrayBuffer();
   const bytes = new Uint8Array(buffer);
 
@@ -798,15 +1051,35 @@ async function analyzeAPK(file) {
   const manifest = extractManifestInfo(manifestStrings);
 
   let allDexFindings = [], allDexStr = '', dexCount = 0, totalDexSize = 0;
+  const packingNotes = [];
   const dexEntries = fileList.filter(f => /^classes\d*\.dex$/.test(f));
   for (const dexName of dexEntries) {
     dexCount++;
     const ab = await zip.files[dexName].async('arraybuffer');
     totalDexSize += ab.byteLength;
-    const { findings, dexStr } = analyzeDex(new Uint8Array(ab));
+    const dexBytes = new Uint8Array(ab);
+    const { findings, dexStr } = analyzeDex(dexBytes);
     allDexFindings.push(...findings);
     allDexStr += dexStr;
+
+    if (typeof DarleneWASM !== 'undefined') {
+      const pack = DarleneWASM.analyzeBuffer(dexBytes);
+      if (pack.packedScore >= 70) {
+        packingNotes.push({
+          sev: 'high',
+          msg: `[WASM] ${dexName}: packing/encryption heuristic ${pack.packedScore}/100 (unique bytes=${pack.uniqueBytes}, backend=${pack.backend})`,
+          cat: 'Packing',
+        });
+      } else if (pack.packedScore >= 45) {
+        packingNotes.push({
+          sev: 'medium',
+          msg: `[WASM] ${dexName}: elevated entropy/packing score ${pack.packedScore}/100 (backend=${pack.backend})`,
+          cat: 'Packing',
+        });
+      }
+    }
   }
+  allDexFindings.push(...packingNotes);
   if (dexCount > 2) allDexFindings.push({ sev:'medium', msg:`MultiDex: ${dexCount} DEX files — complex/split application`, cat:'MultiDex' });
   if (nativeLibs.length > 0) allDexFindings.push({ sev:'medium', msg:`${nativeLibs.length} native .so lib(s): ${nativeLibs.slice(0,4).join(', ')}`, cat:'Native' });
 
@@ -829,12 +1102,18 @@ async function analyzeAPK(file) {
   const warnPerms = manifest.permissions.filter(p => WARNING_PERMS.has(p) && !DANGEROUS_PERMS.has(p));
   const safePerms = manifest.permissions.filter(p => !DANGEROUS_PERMS.has(p) && !WARNING_PERMS.has(p));
 
-  const verdict = scoreRisk(dexFindings, yaraHits, manifest.permissions, masvs);
+  // Run deep manifest permission analysis
+  const { findings: permFindings, comboHits } = analyzePermissions(manifest.permissions);
+  // Merge permission findings into dex findings pool (they're manifest-sourced but same severity scale)
+  dexFindings.push(...permFindings);
+
+  const verdict = scoreRisk(dexFindings, yaraHits, manifest.permissions, masvs, comboHits);
 
   return {
     name:file.name, size:file.size, sha256:sha256hash, verdict,
     manifest, dangerPerms, warnPerms, safePerms,
     dexFindings, yaraHits, masvs, sqlite, zipFlags, signature,
+    comboHits, permFindings,
     dexCount, totalDexSize, nativeLibs, fileList, scannedAt:new Date().toISOString()
   };
 }
@@ -954,7 +1233,7 @@ function renderResult(r) {
         <div class="tab" onclick="switchTab('${id}','masvs',this)">MASVS <span class="tab-badge ${masvsFails>0?'amber':'blue'}">${masvsFails}F ${masvsWarn}W</span></div>
         <div class="tab" onclick="switchTab('${id}','dex',this)">DEX Findings <span class="tab-badge ${highC>0?'red':medC>0?'amber':'blue'}">${r.dexFindings.length}</span></div>
         <div class="tab" onclick="switchTab('${id}','sqlite',this)">SQLite <span class="tab-badge ${sqliteCount>0?'teal':'blue'}">${sqliteCount}</span></div>
-        <div class="tab" onclick="switchTab('${id}','perms',this)">Permissions <span class="tab-badge ${r.dangerPerms.length>0?'red':'blue'}">${r.manifest.permissions.length}</span></div>
+        <div class="tab" onclick="switchTab('${id}','perms',this)">Permissions <span class="tab-badge ${r.dangerPerms.length>0?'red':'blue'}">${r.dangerPerms.length}D${(r.comboHits||[]).length>0?` ⚡${r.comboHits.length}C`:''}</span></div>
       </div>
 
       <div class="tab-content active" id="${id}-overview">
@@ -967,11 +1246,14 @@ function renderResult(r) {
             <tr><td>Size</td><td>${fmt(r.size)}</td></tr>
             <tr><td>DEX Files</td><td>${r.dexCount} (${fmt(r.totalDexSize||0)} total)</td></tr>
             <tr><td>Native Libs</td><td>${r.nativeLibs.length>0?r.nativeLibs.join(', '):'None'}</td></tr>
+            <tr><td>Min SDK</td><td>API ${r.manifest.minSdk}</td></tr>
+            <tr><td>Target SDK</td><td>API ${r.manifest.targetSdk}</td></tr>
             <tr><td>Activities</td><td>${r.manifest.activities.length}</td></tr>
             <tr><td>Services</td><td>${r.manifest.services.length}</td></tr>
             <tr><td>Receivers</td><td>${r.manifest.receivers.length}</td></tr>
             <tr><td>Providers</td><td>${r.manifest.providers.length}</td></tr>
             <tr><td>Backup allowed</td><td>${r.manifest.allowBackup}</td></tr>
+            <tr><td>Perm combos hit</td><td style="color:${(r.comboHits||[]).length>0?'var(--red)':'var(--green)'}">${(r.comboHits||[]).length > 0 ? '⚡ ' + r.comboHits.length + ' — ' + r.comboHits.map(c=>c.label).join(', ') : '✓ None'}</td></tr>
           </table>
         </div>
         <div class="finding-group">
@@ -1038,12 +1320,43 @@ function renderResult(r) {
       </div>
 
       <div class="tab-content" id="${id}-perms">
-        <div style="color:var(--text2);font-size:11px;margin-bottom:10px">${r.dangerPerms.length} dangerous &bull; ${r.warnPerms.length} warning &bull; ${r.safePerms.length} normal</div>
-        <div class="perms-grid">
-          ${r.dangerPerms.map(p=>`<div class="perm-pill danger" title="${p}">⚠ ${p}</div>`).join('')}
-          ${r.warnPerms.map(p=>`<div class="perm-pill warning" title="${p}">• ${p}</div>`).join('')}
-          ${r.safePerms.map(p=>`<div class="perm-pill" title="${p}">${p}</div>`).join('')}
+        <div style="color:var(--text2);font-size:11px;margin-bottom:12px">
+          ${r.dangerPerms.length} dangerous &bull; ${r.warnPerms.length} warning &bull; ${r.safePerms.length} normal &bull; ${r.manifest.permissions.length} total
         </div>
+        ${(r.comboHits||[]).length>0?`
+        <div class="finding-group-title" style="margin-bottom:8px">⚡ High-Risk Combinations Detected</div>
+        ${(r.comboHits||[]).map(c=>`
+          <div class="finding ${c.sev==='critical'?'high':'medium'}" style="margin-bottom:6px;flex-direction:column;gap:6px">
+            <div style="display:flex;gap:8px;align-items:center"><span class="sev">${c.sev}</span><strong style="font-size:12px;color:var(--text)">${c.label}</strong></div>
+            <div class="msg">${c.threat}</div>
+            <div class="cat">Matched permissions: ${c.matched.join(' + ')}</div>
+          </div>`).join('')}
+        <div style="height:12px"></div>`:``}
+        ${r.dangerPerms.length>0?`
+        <div class="finding-group-title" style="margin-bottom:8px">🔴 Critical / High-Risk Permissions (${r.dangerPerms.length})</div>
+        <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:14px">
+          ${r.dangerPerms.map(p=>{
+            const intel=PERM_INTEL[p]||{};
+            return `<div style="display:flex;gap:10px;align-items:flex-start;padding:7px 10px;border-radius:7px;background:var(--red-dim);border:1px solid #ef444430">
+              <div style="flex:1">
+                <div style="font-size:11px;font-weight:700;color:var(--red)">⚠ ${p}</div>
+                ${intel.threat?`<div style="font-size:10px;color:var(--text2);margin-top:2px">${intel.threat}</div>`:''}
+              </div>
+              <div style="font-size:9px;padding:2px 7px;border-radius:4px;background:var(--red);color:#fff;white-space:nowrap;flex-shrink:0;align-self:flex-start;margin-top:2px">${intel.cat||'DANGER'}</div>
+            </div>`;
+          }).join('')}
+        </div>`:``}
+        ${r.warnPerms.length>0?`
+        <div class="finding-group-title" style="margin-bottom:8px">🟡 Warning Permissions (${r.warnPerms.length})</div>
+        <div class="perms-grid" style="margin-bottom:14px">
+          ${r.warnPerms.map(p=>{
+            const intel=PERM_INTEL[p]||{};
+            return `<div class="perm-pill warning" title="${intel.threat||p}">• ${p}${intel.cat?` <span style="opacity:.6;font-size:9px">[${intel.cat}]</span>`:''}</div>`;
+          }).join('')}
+        </div>`:``}
+        ${r.safePerms.length>0?`
+        <div class="finding-group-title" style="margin-bottom:8px">⬜ Other Permissions (${r.safePerms.length})</div>
+        <div class="perms-grid">${r.safePerms.map(p=>`<div class="perm-pill" title="${p}">${p}</div>`).join('')}</div>`:``}
       </div>
     </div>
   `;
@@ -1072,7 +1385,7 @@ function switchTab(id, tab, el) {
 ===================================================================== */
 btnExportJSON.addEventListener('click', () => {
   const clean=results.map(r=>({...r, fileList:undefined}));
-  dl(new Blob([JSON.stringify(clean,null,2)],{type:'application/json'}),'mast_report_'+Date.now()+'.json');
+  dl(new Blob([JSON.stringify(clean,null,2)],{type:'application/json'}),'darlene_x_2_report_'+Date.now()+'.json');
 });
 
 btnExportCSV.addEventListener('click', () => {
@@ -1090,7 +1403,7 @@ btnExportCSV.addEventListener('click', () => {
     '"'+(r.dangerPerms||[]).join(';')+'"',
     r.manifest.pkg, r.size, r.scannedAt
   ]);
-  dl(new Blob([[h.join(','),...rows.map(r=>r.join(','))].join('\n')],{type:'text/csv'}),'mast_summary_'+Date.now()+'.csv');
+  dl(new Blob([[h.join(','),...rows.map(r=>r.join(','))].join('\n')],{type:'text/csv'}),'darlene_x_2_summary_'+Date.now()+'.csv');
 });
 
 function dl(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href)}
@@ -1101,7 +1414,16 @@ btnClear.addEventListener('click',()=>{
   btnScan.disabled=true;btnExportJSON.disabled=true;btnExportCSV.disabled=true;
 });
 
-document.getElementById('engineInfo').textContent='JSZip 3.10 · AXML · DEX · YARA(12 rules) · MASVS(12 controls) · SQLite · Sig Check';
+document.getElementById('engineInfo').textContent='Darlene-X_2.0 · offline · JSZip · AXML · DEX · WASM packing · reference APIs · MASVS · SQLite · perm combos';
+
+// Boot local WASM (same-origin only). No sample data is sent anywhere.
+(async () => {
+  if (typeof DarleneWASM === 'undefined') return;
+  const st = await DarleneWASM.init('wasm/hotpath.wasm');
+  const rules = (typeof DarleneRules !== 'undefined') ? DarleneRules.version : 'n/a';
+  document.getElementById('engineInfo').textContent =
+    `Darlene-X_2.0 · ${st.mode} · rules ${rules} · JSZip · AXML/DEX · MASVS · local-only`;
+})();
 </script>
 </body>
 </html>

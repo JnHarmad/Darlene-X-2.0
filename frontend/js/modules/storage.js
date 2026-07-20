@@ -3,7 +3,7 @@
  */
 class StorageManager {
     constructor() {
-        this.prefix = 'darlene_x_';
+        this.prefix = 'darlene_x_2_';
     }
 
     /**

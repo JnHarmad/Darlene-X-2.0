@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Darlene-X · APK Static Analysis</title>
+<title>Darlene-X_2.0 · APK Static Analysis</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 :root {
@@ -163,7 +163,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:13
   <div class="header">
     <div class="logo">🛡</div>
     <div>
-      <h1>Darlene-X</h1>
+      <h1>Darlene-X_2.0</h1>
       <p>Android Malware Static Analysis Framework &mdash; fully client-side, zero network exposure</p>
     </div>
     <div class="badges">
@@ -1354,7 +1354,7 @@ function switchTab(id, tab, el) {
 ===================================================================== */
 btnExportJSON.addEventListener('click', () => {
   const clean=results.map(r=>({...r, fileList:undefined}));
-  dl(new Blob([JSON.stringify(clean,null,2)],{type:'application/json'}),'mast_report_'+Date.now()+'.json');
+  dl(new Blob([JSON.stringify(clean,null,2)],{type:'application/json'}),'darlene_x_2_report_'+Date.now()+'.json');
 });
 
 btnExportCSV.addEventListener('click', () => {
@@ -1372,7 +1372,7 @@ btnExportCSV.addEventListener('click', () => {
     '"'+(r.dangerPerms||[]).join(';')+'"',
     r.manifest.pkg, r.size, r.scannedAt
   ]);
-  dl(new Blob([[h.join(','),...rows.map(r=>r.join(','))].join('\n')],{type:'text/csv'}),'mast_summary_'+Date.now()+'.csv');
+  dl(new Blob([[h.join(','),...rows.map(r=>r.join(','))].join('\n')],{type:'text/csv'}),'darlene_x_2_summary_'+Date.now()+'.csv');
 });
 
 function dl(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href)}
@@ -1383,7 +1383,7 @@ btnClear.addEventListener('click',()=>{
   btnScan.disabled=true;btnExportJSON.disabled=true;btnExportCSV.disabled=true;
 });
 
-document.getElementById('engineInfo').textContent='Darlene-X · JSZip 3.10 · AXML · DEX · YARA(12) · MASVS(12) · SQLite · 9 Perm Combos · 70+ Perm Intel';
+document.getElementById('engineInfo').textContent='Darlene-X_2.0 · JSZip 3.10 · AXML · DEX · YARA(12) · MASVS(12) · SQLite · 9 Perm Combos · 70+ Perm Intel';
 </script>
 </body>
 </html>
